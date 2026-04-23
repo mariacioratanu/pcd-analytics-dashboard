@@ -45,6 +45,10 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", service: "websocket-gateway", connectedClients });
 });
 
+app.get("/snapshot", (req, res) => {
+  res.json({ connectedClients, recentActivity });
+});
+
 app.post("/pubsub/push", (req, res) => {
   try {
     const message = req.body.message;
