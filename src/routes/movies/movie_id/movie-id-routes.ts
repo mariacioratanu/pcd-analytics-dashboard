@@ -7,6 +7,7 @@ import {
   ReplaceMovieSchema,
   UpdateMovieSchema
 } from '../../../schemas/movies/http';
+import { publishMovieViewedEvent } from '../../../utils/pubsub-utils';
 import { API_ENDPOINTS } from '../../../utils/constants/constants';
 import {
   HttpMediaTypes,
@@ -28,6 +29,10 @@ const routes: RouteOptions[] = [
     handler: async function fetchMovie(request, reply) {
       const params = request.params as MovieIdObjectSchemaType;
       const movie = (await this.dataStore.fetchMovie(params.movie_id)) as MovieSchemaType;
+
+      void publishMovieViewedEvent(params.movie_id, movie.title).catch((error: unknown) => {
+        this.log.error({ error, movieId: params.movie_id }, 'Failed to publish movie viewed event');
+      });
 
       if (acceptsHal(request)) {
         const halMovie = addLinksToResource<typeof MovieSchema>(request, movie);
