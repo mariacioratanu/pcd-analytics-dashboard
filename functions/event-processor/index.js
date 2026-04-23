@@ -13,35 +13,66 @@ async function publishDashboardUpdate(payload) {
   await pubsub.topic(DASHBOARD_UPDATES_TOPIC).publishMessage({ data: dataBuffer });
 }
 
-function normalizeEventData(rawData) {
-  if (rawData == null) {
-    return {};
+function extractBase64Data(cloudEvent) {
+  const raw = cloudEvent?.data;
+
+  if (typeof raw === "string") {
+    return { base64Data: raw, messageId: cloudEvent?.id || "unknown-message-id", rawType: "string" };
   }
 
-  if (typeof rawData === "string") {
-    try {
-      return JSON.parse(rawData);
-    } catch {
-      return { raw: rawData };
+  if (raw?.message?.data) {
+    return { base64Data: raw.message.data, messageId: raw.message.messageId || cloudEvent?.id || "unknown-message-id", rawType: "message.data" };
+  }
+
+  if (raw?.data) {
+    return { base64Data: raw.data, messageId: raw.messageId || cloudEvent?.id || "unknown-message-id", rawType: "data" };
+  }
+
+  return { base64Data: null, messageId: cloudEvent?.id || "unknown-message-id", rawType: typeof raw };
+}
+
+function parseLooseObjectString(decoded) {
+  const trimmed = decoded.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    throw new Error("Decoded payload is neither valid JSON nor loose object format");
+  }
+
+  const inner = trimmed.slice(1, -1);
+  const parts = inner.split(/,(?=[a-zA-Z_][a-zA-Z0-9_]*:)/);
+  const obj = {};
+
+  for (const part of parts) {
+    const idx = part.indexOf(":");
+    if (idx === -1) {
+      continue;
     }
+
+    const key = part.slice(0, idx).trim().replace(/^"|"$/g, "");
+    const value = part.slice(idx + 1).trim().replace(/^"|"$/g, "");
+    obj[key] = value;
   }
 
-  return rawData;
+  return obj;
+}
+
+function decodePayload(base64Data) {
+  const decoded = Buffer.from(base64Data, "base64").toString();
+
+  try {
+    return JSON.parse(decoded);
+  } catch {
+    return parseLooseObjectString(decoded);
+  }
 }
 
 exports.processResourceEvent = async (cloudEvent) => {
-  const rawEventData = cloudEvent?.data;
-  const eventData = normalizeEventData(rawEventData);
-  const message = eventData?.message ?? eventData;
-  const base64Data = message?.data;
-  const messageId = message?.messageId ?? message?.message_id ?? cloudEvent?.id ?? "unknown-message-id";
+  const { base64Data, messageId, rawType } = extractBase64Data(cloudEvent);
 
   console.log(JSON.stringify({
     msg: "Received cloud event",
     cloudEventId: cloudEvent?.id,
     cloudEventType: cloudEvent?.type,
-    eventDataKeys: eventData && typeof eventData === "object" ? Object.keys(eventData) : [],
-    messageKeys: message && typeof message === "object" ? Object.keys(message) : [],
+    rawType,
     hasBase64Data: Boolean(base64Data)
   }));
 
@@ -49,25 +80,12 @@ exports.processResourceEvent = async (cloudEvent) => {
     console.error(JSON.stringify({
       msg: "No Pub/Sub payload received",
       cloudEventId: cloudEvent?.id,
-      cloudEventType: cloudEvent?.type,
-      eventData,
-      rawDataType: typeof rawEventData
+      cloudEventType: cloudEvent?.type
     }));
     throw new Error("No Pub/Sub payload received");
   }
 
-  let payload;
-  try {
-    payload = JSON.parse(Buffer.from(base64Data, "base64").toString());
-  } catch (error) {
-    console.error(JSON.stringify({
-      msg: "Failed to decode Pub/Sub payload",
-      messageId,
-      error: error.message
-    }));
-    throw error;
-  }
-
+  const payload = decodePayload(base64Data);
   const movieId = payload.movieId || "unknown-movie";
   const movieTitle = payload.movieTitle || "Unknown";
   const statsRef = firestore.collection(ANALYTICS_COLLECTION).doc(movieId);
@@ -111,14 +129,22 @@ exports.processResourceEvent = async (cloudEvent) => {
   const updatedDoc = await statsRef.get();
   const stats = updatedDoc.data();
 
-  await publishDashboardUpdate({
-    type: "movie_viewed_processed",
-    movieId: stats.movieId,
-    movieTitle: stats.movieTitle,
-    viewCount: stats.viewCount,
-    lastViewed: stats.lastViewed,
-    processedAt: now
-  });
+  try {
+    await publishDashboardUpdate({
+      type: "movie_viewed_processed",
+      movieId: stats.movieId,
+      movieTitle: stats.movieTitle,
+      viewCount: stats.viewCount,
+      lastViewed: stats.lastViewed,
+      processedAt: now
+    });
+  } catch (error) {
+    console.error(JSON.stringify({
+      msg: "Failed to publish dashboard update",
+      movieId,
+      error: error.message
+    }));
+  }
 
   console.log(JSON.stringify({
     msg: "Event processed",
