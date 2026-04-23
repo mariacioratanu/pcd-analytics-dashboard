@@ -13,26 +13,65 @@ async function publishDashboardUpdate(payload) {
   await pubsub.topic(DASHBOARD_UPDATES_TOPIC).publishMessage({ data: dataBuffer });
 }
 
-exports.processResourceEvent = async (cloudEvent) => {
-  const message = cloudEvent.data && cloudEvent.data.message ? cloudEvent.data.message : cloudEvent.data;
-  if (!message || !message.data) {
-    console.log(JSON.stringify({ msg: "No Pub/Sub payload received" }));
-    return;
+function normalizeEventData(rawData) {
+  if (rawData == null) {
+    return {};
   }
 
-  const messageId = message.messageId || "unknown-message-id";
-  const payload = JSON.parse(Buffer.from(message.data, "base64").toString());
-  const processedRef = firestore.collection(PROCESSED_COLLECTION).doc(messageId);
-  const processedDoc = await processedRef.get();
+  if (typeof rawData === "string") {
+    try {
+      return JSON.parse(rawData);
+    } catch {
+      return { raw: rawData };
+    }
+  }
 
-  if (processedDoc.exists) {
-    console.log(JSON.stringify({ msg: "Duplicate message skipped", messageId }));
-    return;
+  return rawData;
+}
+
+exports.processResourceEvent = async (cloudEvent) => {
+  const rawEventData = cloudEvent?.data;
+  const eventData = normalizeEventData(rawEventData);
+  const message = eventData?.message ?? eventData;
+  const base64Data = message?.data;
+  const messageId = message?.messageId ?? message?.message_id ?? cloudEvent?.id ?? "unknown-message-id";
+
+  console.log(JSON.stringify({
+    msg: "Received cloud event",
+    cloudEventId: cloudEvent?.id,
+    cloudEventType: cloudEvent?.type,
+    eventDataKeys: eventData && typeof eventData === "object" ? Object.keys(eventData) : [],
+    messageKeys: message && typeof message === "object" ? Object.keys(message) : [],
+    hasBase64Data: Boolean(base64Data)
+  }));
+
+  if (!base64Data) {
+    console.error(JSON.stringify({
+      msg: "No Pub/Sub payload received",
+      cloudEventId: cloudEvent?.id,
+      cloudEventType: cloudEvent?.type,
+      eventData,
+      rawDataType: typeof rawEventData
+    }));
+    throw new Error("No Pub/Sub payload received");
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(base64Data, "base64").toString());
+  } catch (error) {
+    console.error(JSON.stringify({
+      msg: "Failed to decode Pub/Sub payload",
+      messageId,
+      error: error.message
+    }));
+    throw error;
   }
 
   const movieId = payload.movieId || "unknown-movie";
   const movieTitle = payload.movieTitle || "Unknown";
   const statsRef = firestore.collection(ANALYTICS_COLLECTION).doc(movieId);
+  const processedRef = firestore.collection(PROCESSED_COLLECTION).doc(messageId);
   const now = new Date().toISOString();
 
   await firestore.runTransaction(async (tx) => {
@@ -40,6 +79,7 @@ exports.processResourceEvent = async (cloudEvent) => {
     const alreadyProcessed = await tx.get(processedRef);
 
     if (alreadyProcessed.exists) {
+      console.log(JSON.stringify({ msg: "Duplicate message skipped", messageId, movieId }));
       return;
     }
 
@@ -80,5 +120,10 @@ exports.processResourceEvent = async (cloudEvent) => {
     processedAt: now
   });
 
-  console.log(JSON.stringify({ msg: "Event processed", messageId, movieId, viewCount: stats.viewCount }));
+  console.log(JSON.stringify({
+    msg: "Event processed",
+    messageId,
+    movieId,
+    viewCount: stats.viewCount
+  }));
 };
