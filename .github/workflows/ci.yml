@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - 'src/**'
+      - 'run.sh'
+
+  pull_request:
+    branches:
+      - main
+
+env:
+  APP_NAME: ${{ vars.APP_NAME }}
+  TEST_ENDPOINT: 'http://localhost:${{ vars.APP_HOST_PORT }}${{ vars.TEST_ROUTE }}'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ${{ env.APP_NAME }} with Docker Compose
+        run: |
+          set -e
+          chmod +x run.sh
+          ./run.sh
+
+      - name: Wait for ${{ env.APP_NAME }} to be ready
+        run: |
+          while ! curl -s ${{ env.TEST_ENDPOINT }}; do
+            echo "Waiting for ${{ env.APP_NAME }}..."
+            sleep 1
+          done
+
+      - name: Run basic test (workshop scenario)
+        run: |
+          echo "Sending a request to ${{ env.TEST_ENDPOINT }}"
+          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.TEST_ENDPOINT }})
+          echo "Response status code: $RESPONSE_CODE"
+          if [ $RESPONSE_CODE -eq 200 ]; then
+            echo "Basic health check PASSED!"
+          else
+            echo " Basic health check FAILED!"
+            exit 1
+          fi
+
+      - name: Tear down Docker Compose
+        run: |
+          docker compose -f docker-compose.yml down
+
+      - name: Run unit/integration tests
+        run: |
+          npm ci || { echo "npm ci failed"; exit 1; }
+          npm run test || { echo "npm ci failed"; exit 1; }
+
+      - name: Report coverage to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: ./coverage/lcov.info

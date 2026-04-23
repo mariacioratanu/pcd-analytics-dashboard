@@ -1,0 +1,12 @@
+{
+    "name": "analytics-service",
+    "version": "1.0.0",
+    "scripts": {
+        "start": "node index.js"
+    },
+    "dependencies": {
+        "express": "^4.21.0",
+        "@google-cloud/firestore": "^7.11.0",
+        "@google-cloud/pubsub": "^4.9.0"
+    }
+}
