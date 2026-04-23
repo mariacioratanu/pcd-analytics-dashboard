@@ -1,0 +1,13 @@
+{
+  "name": "event-processor",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "functions-framework --target=processResourceEvent --signature-type=cloudevent"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.11.0",
+    "@google-cloud/functions-framework": "^3.4.6",
+    "@google-cloud/pubsub": "^4.9.0"
+  }
+}
