@@ -8,8 +8,10 @@
     body { font-family: Arial, sans-serif; margin: 24px; background: #f5f7fb; color: #1f2937; }
     h1 { margin-bottom: 8px; }
     .card { background: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+    .mono { font-family: Consolas, monospace; word-break: break-all; }
     ul { padding-left: 20px; }
-    code { background: #eef2ff; padding: 2px 6px; border-radius: 6px; }
+    li { margin-bottom: 8px; }
+    .muted { color: #6b7280; }
   </style>
 </head>
 <body>
@@ -17,8 +19,10 @@
   <p>Realtime updates from WebSocket Gateway</p>
 
   <div class="card">
-    <strong>Status:</strong> <span id="status">disconnected</span><br />
-    <strong>Connected clients:</strong> <span id="clients">0</span>
+    <div><strong>Status:</strong> <span id="status">disconnected</span></div>
+    <div><strong>Connected clients:</strong> <span id="clients">0</span></div>
+    <div><strong>Gateway URL:</strong></div>
+    <div id="gateway-url" class="mono muted"></div>
   </div>
 
   <div class="card">
@@ -27,8 +31,7 @@
   </div>
 
   <div class="card">
-    <h2>Latency metrics</h2>
-    <p>Placeholder for p50 / p95 / p99 charts.</p>
+    <h2>Last processed update</h2>
     <ul id="latency-metrics"></ul>
   </div>
 
