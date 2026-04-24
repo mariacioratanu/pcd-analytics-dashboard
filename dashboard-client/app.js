@@ -4,6 +4,13 @@ const activityEl = document.getElementById("activity");
 const latencyMetricsEl = document.getElementById("latency-metrics");
 const gatewayUrlEl = document.getElementById("gateway-url");
 
+const totalUpdatesEl = document.getElementById("metric-total-updates");
+const latestLatencyEl = document.getElementById("metric-latest-latency");
+const p50El = document.getElementById("metric-p50");
+const p95El = document.getElementById("metric-p95");
+const p99El = document.getElementById("metric-p99");
+const samplesEl = document.getElementById("metric-samples");
+
 const params = new URLSearchParams(window.location.search);
 let gatewayUrl = params.get("ws") || params.get("gateway") || localStorage.getItem("gatewayUrl") || "ws://localhost:8080";
 
@@ -17,6 +24,29 @@ if (gatewayUrl.startsWith("http://")) {
 
 localStorage.setItem("gatewayUrl", gatewayUrl);
 gatewayUrlEl.textContent = gatewayUrl;
+
+function formatMetric(value) {
+  return value === null || value === undefined ? "-" : String(value);
+}
+
+function renderMetrics(metrics) {
+  if (!metrics) {
+    totalUpdatesEl.textContent = "0";
+    latestLatencyEl.textContent = "-";
+    p50El.textContent = "-";
+    p95El.textContent = "-";
+    p99El.textContent = "-";
+    samplesEl.textContent = "0";
+    return;
+  }
+
+  totalUpdatesEl.textContent = formatMetric(metrics.totalUpdates);
+  latestLatencyEl.textContent = formatMetric(metrics.latestLatencyMs);
+  p50El.textContent = formatMetric(metrics.p50LatencyMs);
+  p95El.textContent = formatMetric(metrics.p95LatencyMs);
+  p99El.textContent = formatMetric(metrics.p99LatencyMs);
+  samplesEl.textContent = formatMetric(metrics.sampleCount);
+}
 
 function renderActivity(items) {
   activityEl.innerHTML = "";
@@ -33,7 +63,8 @@ function renderActivity(items) {
     const title = item.movieTitle || item.movieId || "Unknown movie";
     const count = item.viewCount ?? "?";
     const when = item.processedAt || item.lastViewed || "-";
-    li.textContent = `${title} | views=${count} | time=${when}`;
+    const latency = item.endToEndLatencyMs ?? "-";
+    li.textContent = `${title} | views=${count} | time=${when} | latencyMs=${latency}`;
     activityEl.appendChild(li);
   });
 }
@@ -49,13 +80,14 @@ function renderLastUpdate(payload) {
   }
 
   const li = document.createElement("li");
-  li.textContent = `${payload.movieTitle || payload.movieId} | views=${payload.viewCount ?? "?"} | processedAt=${payload.processedAt || payload.lastViewed || "-"}`;
+  li.textContent = `${payload.movieTitle || payload.movieId} | views=${payload.viewCount ?? "?"} | processedAt=${payload.processedAt || payload.lastViewed || "-"} | latencyMs=${payload.endToEndLatencyMs ?? "-"}`;
   latencyMetricsEl.appendChild(li);
 }
 
 statusEl.textContent = "connecting";
 renderActivity([]);
 renderLastUpdate(null);
+renderMetrics(null);
 
 const socket = new WebSocket(gatewayUrl);
 
@@ -78,15 +110,18 @@ socket.addEventListener("message", (event) => {
     clientsEl.textContent = message.connectedClients;
   }
 
+  if (message.metrics) {
+    renderMetrics(message.metrics);
+  }
+
   if (Array.isArray(message.recentActivity)) {
     renderActivity(message.recentActivity);
-
     if (message.recentActivity.length > 0) {
-      renderLastUpdate(message.payload || message.recentActivity[0]);
+      renderLastUpdate(message.lastProcessedUpdate || message.payload || message.recentActivity[0]);
     } else {
-      renderLastUpdate(message.payload || null);
+      renderLastUpdate(message.lastProcessedUpdate || message.payload || null);
     }
-  } else if (message.payload) {
-    renderLastUpdate(message.payload);
+  } else if (message.lastProcessedUpdate || message.payload) {
+    renderLastUpdate(message.lastProcessedUpdate || message.payload);
   }
 });

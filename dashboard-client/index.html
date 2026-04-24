@@ -12,6 +12,9 @@
     ul { padding-left: 20px; }
     li { margin-bottom: 8px; }
     .muted { color: #6b7280; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .metric { background: #f8fafc; border-radius: 10px; padding: 12px; }
+    .metric strong { display: block; margin-bottom: 6px; }
   </style>
 </head>
 <body>
@@ -23,6 +26,18 @@
     <div><strong>Connected clients:</strong> <span id="clients">0</span></div>
     <div><strong>Gateway URL:</strong></div>
     <div id="gateway-url" class="mono muted"></div>
+  </div>
+
+  <div class="card">
+    <h2>Live metrics</h2>
+    <div class="grid">
+      <div class="metric"><strong>Total updates</strong><span id="metric-total-updates">0</span></div>
+      <div class="metric"><strong>Latest latency (ms)</strong><span id="metric-latest-latency">-</span></div>
+      <div class="metric"><strong>p50 latency (ms)</strong><span id="metric-p50">-</span></div>
+      <div class="metric"><strong>p95 latency (ms)</strong><span id="metric-p95">-</span></div>
+      <div class="metric"><strong>p99 latency (ms)</strong><span id="metric-p99">-</span></div>
+      <div class="metric"><strong>Latency samples</strong><span id="metric-samples">0</span></div>
+    </div>
   </div>
 
   <div class="card">
