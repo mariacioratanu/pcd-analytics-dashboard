@@ -64,7 +64,7 @@ function renderActivity(items) {
     const count = item.viewCount ?? "?";
     const when = item.processedAt || item.lastViewed || "-";
     const latency = item.endToEndLatencyMs ?? "-";
-    li.textContent = `${title} | views=${count} | time=${when} | latencyMs=${latency}`;
+    li.textContent = `${title} | views=${count} | processedAt=${when} | e2eLatencyMs=${latency}`;
     activityEl.appendChild(li);
   });
 }
@@ -80,7 +80,7 @@ function renderLastUpdate(payload) {
   }
 
   const li = document.createElement("li");
-  li.textContent = `${payload.movieTitle || payload.movieId} | views=${payload.viewCount ?? "?"} | processedAt=${payload.processedAt || payload.lastViewed || "-"} | latencyMs=${payload.endToEndLatencyMs ?? "-"}`;
+  li.textContent = `${payload.movieTitle || payload.movieId} | views=${payload.viewCount ?? "?"} | processedAt=${payload.processedAt || "-"} | processingLatencyMs=${payload.processingLatencyMs ?? "-"} | gatewayLatencyMs=${payload.gatewayLatencyMs ?? "-"} | endToEndLatencyMs=${payload.endToEndLatencyMs ?? "-"}`;
   latencyMetricsEl.appendChild(li);
 }
 
@@ -116,12 +116,11 @@ socket.addEventListener("message", (event) => {
 
   if (Array.isArray(message.recentActivity)) {
     renderActivity(message.recentActivity);
-    if (message.recentActivity.length > 0) {
-      renderLastUpdate(message.lastProcessedUpdate || message.payload || message.recentActivity[0]);
-    } else {
-      renderLastUpdate(message.lastProcessedUpdate || message.payload || null);
-    }
-  } else if (message.lastProcessedUpdate || message.payload) {
+  }
+
+  if (message.lastProcessedUpdate || message.payload) {
     renderLastUpdate(message.lastProcessedUpdate || message.payload);
+  } else if (Array.isArray(message.recentActivity) && message.recentActivity.length > 0) {
+    renderLastUpdate(message.recentActivity[0]);
   }
 });

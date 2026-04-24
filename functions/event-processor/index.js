@@ -70,6 +70,11 @@ function buildFallbackMessageId(base64Data) {
   return crypto.createHash("sha256").update(base64Data).digest("hex");
 }
 
+function toMillis(value) {
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 exports.processResourceEvent = async (cloudEvent) => {
   const { base64Data, messageId: rawMessageId, rawType } = extractBase64Data(cloudEvent);
 
@@ -94,9 +99,13 @@ exports.processResourceEvent = async (cloudEvent) => {
   const payload = decodePayload(base64Data);
   const movieId = payload.movieId || "unknown-movie";
   const movieTitle = payload.movieTitle || "Unknown";
+  const accessedAt = payload.accessedAt || payload.viewedAt || new Date().toISOString();
+  const processedAt = new Date().toISOString();
+  const accessedAtMs = toMillis(accessedAt);
+  const processedAtMs = toMillis(processedAt);
+  const processingLatencyMs = accessedAtMs !== null && processedAtMs !== null && processedAtMs >= accessedAtMs ? processedAtMs - accessedAtMs : null;
   const statsRef = firestore.collection(ANALYTICS_COLLECTION).doc(movieId);
   const processedRef = firestore.collection(PROCESSED_COLLECTION).doc(messageId);
-  const now = new Date().toISOString();
   let duplicate = false;
 
   await firestore.runTransaction(async (tx) => {
@@ -113,22 +122,24 @@ exports.processResourceEvent = async (cloudEvent) => {
         movieId,
         movieTitle,
         viewCount: FieldValue.increment(1),
-        lastViewed: now,
-        updatedAt: now
+        lastViewed: accessedAt,
+        lastProcessedAt: processedAt,
+        updatedAt: processedAt
       });
     } else {
       tx.set(statsRef, {
         movieId,
         movieTitle,
         viewCount: 1,
-        lastViewed: now,
-        createdAt: now,
-        updatedAt: now
+        lastViewed: accessedAt,
+        lastProcessedAt: processedAt,
+        createdAt: processedAt,
+        updatedAt: processedAt
       });
     }
 
     tx.set(processedRef, {
-      processedAt: now,
+      processedAt,
       movieId
     });
   });
@@ -141,15 +152,19 @@ exports.processResourceEvent = async (cloudEvent) => {
   const updatedDoc = await statsRef.get();
   const stats = updatedDoc.data();
 
+  const dashboardPayload = {
+    type: "movie_viewed_processed",
+    movieId: stats.movieId,
+    movieTitle: stats.movieTitle,
+    viewCount: stats.viewCount,
+    accessedAt,
+    lastViewed: stats.lastViewed || accessedAt,
+    processedAt,
+    processingLatencyMs
+  };
+
   try {
-    await publishDashboardUpdate({
-      type: "movie_viewed_processed",
-      movieId: stats.movieId,
-      movieTitle: stats.movieTitle,
-      viewCount: stats.viewCount,
-      lastViewed: stats.lastViewed,
-      processedAt: now
-    });
+    await publishDashboardUpdate(dashboardPayload);
   } catch (error) {
     console.error(JSON.stringify({
       msg: "Failed to publish dashboard update",
@@ -162,6 +177,7 @@ exports.processResourceEvent = async (cloudEvent) => {
     msg: "Event processed",
     messageId,
     movieId,
-    viewCount: stats.viewCount
+    viewCount: stats.viewCount,
+    processingLatencyMs
   }));
 };

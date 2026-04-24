@@ -4,6 +4,7 @@ type ResourceViewedEvent = {
   event: "movie_viewed";
   movieId: string;
   movieTitle: string;
+  accessedAt: string;
   viewedAt: string;
   source: "fast-lazy-bee";
 };
@@ -26,11 +27,13 @@ export const publishMovieViewedEvent = async (movieId: string, movieTitle: strin
   }
 
   const topicName = process.env.RESOURCE_EVENTS_TOPIC || "resource-events";
+  const accessedAt = new Date().toISOString();
   const payload: ResourceViewedEvent = {
     event: "movie_viewed",
     movieId,
     movieTitle,
-    viewedAt: new Date().toISOString(),
+    accessedAt,
+    viewedAt: accessedAt,
     source: "fast-lazy-bee"
   };
 

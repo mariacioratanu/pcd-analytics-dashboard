@@ -16,6 +16,11 @@ let latencySamples = [];
 let totalUpdates = 0;
 let lastProcessedUpdate = null;
 
+function toMillis(value) {
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 function percentile(sortedValues, p) {
   if (!sortedValues.length) {
     return null;
@@ -86,12 +91,22 @@ app.post("/pubsub/push", (req, res) => {
     }
 
     const payload = JSON.parse(Buffer.from(message.data, "base64").toString());
+    const gatewayReceivedAt = new Date().toISOString();
+    const accessedAtMs = toMillis(payload.accessedAt || payload.lastViewed);
+    const processedAtMs = toMillis(payload.processedAt);
+    const gatewayReceivedAtMs = toMillis(gatewayReceivedAt);
 
-    const viewedAtMs = payload.lastViewed ? Date.parse(payload.lastViewed) : null;
-    const processedAtMs = payload.processedAt ? Date.parse(payload.processedAt) : null;
-    const endToEndLatencyMs = viewedAtMs !== null && processedAtMs !== null ? processedAtMs - viewedAtMs : null;
+    const processingLatencyMs = typeof payload.processingLatencyMs === "number" ? payload.processingLatencyMs : accessedAtMs !== null && processedAtMs !== null && processedAtMs >= accessedAtMs ? processedAtMs - accessedAtMs : null;
+    const gatewayLatencyMs = processedAtMs !== null && gatewayReceivedAtMs !== null && gatewayReceivedAtMs >= processedAtMs ? gatewayReceivedAtMs - processedAtMs : null;
+    const endToEndLatencyMs = accessedAtMs !== null && gatewayReceivedAtMs !== null && gatewayReceivedAtMs >= accessedAtMs ? gatewayReceivedAtMs - accessedAtMs : null;
 
-    const enrichedPayload = { ...payload, endToEndLatencyMs };
+    const enrichedPayload = {
+      ...payload,
+      gatewayReceivedAt,
+      processingLatencyMs,
+      gatewayLatencyMs,
+      endToEndLatencyMs
+    };
 
     totalUpdates += 1;
     lastProcessedUpdate = enrichedPayload;
