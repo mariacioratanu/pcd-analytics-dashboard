@@ -28,9 +28,33 @@ Start-Sleep -Seconds 2
 
 $StartUtc = (Get-Date).ToUniversalTime().ToString("o")
 $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$StatusCodes = @{}
 
 for ($i = 1; $i -le $Requests; $i++) {
-  curl.exe -s -o NUL -H "Cache-Control: no-cache" "$FastUrl/api/v1/movies/$MovieId"
+  $StatusCode = curl.exe -s -o NUL -w "%{http_code}" -H "Cache-Control: no-cache" "$FastUrl/api/v1/movies/$MovieId"
+
+  if ($StatusCodes.ContainsKey($StatusCode)) {
+    $StatusCodes[$StatusCode] += 1
+  } else {
+    $StatusCodes[$StatusCode] = 1
+  }
+}
+
+$SuccessfulRequests = 0
+$FailedRequests = 0
+
+foreach ($Code in $StatusCodes.Keys) {
+  if ($Code -match "^2\d\d$") {
+    $SuccessfulRequests += $StatusCodes[$Code]
+  } else {
+    $FailedRequests += $StatusCodes[$Code]
+  }
+}
+
+$ErrorRatePercent = if ($Requests -gt 0) {
+  [Math]::Round(($FailedRequests / $Requests) * 100, 2)
+} else {
+  0
 }
 
 $Stopwatch.Stop()
@@ -50,8 +74,12 @@ $Result = [ordered]@{
   region = $Region
   movieId = $MovieId
   requests = $Requests
-  startedAtUtc = $StartUtc
-  sendDurationMs = $SendDurationMs
+successfulRequests = $SuccessfulRequests
+failedRequests = $FailedRequests
+errorRatePercent = $ErrorRatePercent
+httpStatusCodes = $StatusCodes
+startedAtUtc = $StartUtc
+sendDurationMs = $SendDurationMs
   approxRequestRatePerSecond = $ApproxRequestRate
   waitSeconds = $WaitSeconds
   gatewayUrl = $GatewayUrl
@@ -67,9 +95,13 @@ $Result | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 $JsonPath
 $Summary = [pscustomobject]@{
   timestamp = $Timestamp
   requests = $Requests
-  sendDurationMs = $SendDurationMs
-  approxRequestRatePerSecond = $ApproxRequestRate
-  totalUpdates = $Snapshot.metrics.totalUpdates
+successfulRequests = $SuccessfulRequests
+failedRequests = $FailedRequests
+errorRatePercent = $ErrorRatePercent
+httpStatusCodes = ($StatusCodes.GetEnumerator() | ForEach-Object { "$($_.Key):$($_.Value)" }) -join ";"
+sendDurationMs = $SendDurationMs
+approxRequestRatePerSecond = $ApproxRequestRate
+totalUpdates = $Snapshot.metrics.totalUpdates
   totalBroadcasts = $Snapshot.metrics.totalBroadcasts
   coalescedUpdates = $Snapshot.metrics.coalescedUpdates
   sampleCount = $Snapshot.metrics.sampleCount
