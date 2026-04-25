@@ -11,6 +11,10 @@ const p50El = document.getElementById("metric-p50");
 const p95El = document.getElementById("metric-p95");
 const p99El = document.getElementById("metric-p99");
 const samplesEl = document.getElementById("metric-samples");
+const latencyChartEl = document.getElementById("latency-chart");
+const latencyChartCtx = latencyChartEl ? latencyChartEl.getContext("2d") : null;
+const latencyHistory = [];
+const MAX_LATENCY_HISTORY = 40;
 
 const params = new URLSearchParams(window.location.search);
 
@@ -61,6 +65,100 @@ function formatDate(value) {
   return date.toLocaleString();
 }
 
+function pushLatencyHistory(metrics) {
+  if (!metrics) {
+    return;
+  }
+
+  latencyHistory.push({
+    latest: metrics.latestLatencyMs,
+    p50: metrics.p50LatencyMs,
+    p95: metrics.p95LatencyMs,
+    p99: metrics.p99LatencyMs
+  });
+
+  while (latencyHistory.length > MAX_LATENCY_HISTORY) {
+    latencyHistory.shift();
+  }
+}
+
+function drawLine(points, key, color, width, height, padding, maxValue) {
+  if (!latencyChartCtx || points.length < 2) {
+    return;
+  }
+
+  latencyChartCtx.beginPath();
+  latencyChartCtx.strokeStyle = color;
+  latencyChartCtx.lineWidth = 2;
+
+  points.forEach((point, index) => {
+    const rawValue = point[key];
+
+    if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
+      return;
+    }
+
+    const x = padding + (index / Math.max(points.length - 1, 1)) * (width - padding * 2);
+    const y = height - padding - (rawValue / maxValue) * (height - padding * 2);
+
+    if (index === 0) {
+      latencyChartCtx.moveTo(x, y);
+    } else {
+      latencyChartCtx.lineTo(x, y);
+    }
+  });
+
+  latencyChartCtx.stroke();
+}
+
+function renderLatencyChart() {
+  if (!latencyChartCtx || !latencyChartEl) {
+    return;
+  }
+
+  const width = latencyChartEl.width;
+  const height = latencyChartEl.height;
+  const padding = 34;
+
+  latencyChartCtx.clearRect(0, 0, width, height);
+  latencyChartCtx.fillStyle = "#ffffff";
+  latencyChartCtx.fillRect(0, 0, width, height);
+
+  const values = latencyHistory.flatMap((entry) =>
+    [entry.latest, entry.p50, entry.p95, entry.p99].filter(
+      (value) => typeof value === "number" && Number.isFinite(value)
+    )
+  );
+
+  if (!values.length) {
+    latencyChartCtx.fillStyle = "#6b7280";
+    latencyChartCtx.font = "16px Arial";
+    latencyChartCtx.fillText("Waiting for latency samples...", padding, height / 2);
+    return;
+  }
+
+  const maxValue = Math.max(...values, 1);
+  const roundedMax = Math.ceil(maxValue / 1000) * 1000 || maxValue;
+
+  latencyChartCtx.strokeStyle = "#e5e7eb";
+  latencyChartCtx.lineWidth = 1;
+  latencyChartCtx.beginPath();
+  latencyChartCtx.moveTo(padding, padding);
+  latencyChartCtx.lineTo(padding, height - padding);
+  latencyChartCtx.lineTo(width - padding, height - padding);
+  latencyChartCtx.stroke();
+
+  latencyChartCtx.fillStyle = "#6b7280";
+  latencyChartCtx.font = "12px Arial";
+  latencyChartCtx.fillText(`${roundedMax} ms`, 6, padding + 4);
+  latencyChartCtx.fillText("0 ms", 10, height - padding + 4);
+
+  drawLine(latencyHistory, "latest", "#2563eb", width, height, padding, roundedMax);
+  drawLine(latencyHistory, "p50", "#16a34a", width, height, padding, roundedMax);
+  drawLine(latencyHistory, "p95", "#f59e0b", width, height, padding, roundedMax);
+  drawLine(latencyHistory, "p99", "#dc2626", width, height, padding, roundedMax);
+}
+
 function setLoadingState() {
   statusEl.textContent = "loading snapshot...";
   clientsEl.textContent = "loading...";
@@ -105,6 +203,8 @@ function renderMetrics(metrics) {
   p95El.textContent = formatMetric(metrics.p95LatencyMs);
   p99El.textContent = formatMetric(metrics.p99LatencyMs);
   samplesEl.textContent = formatMetric(metrics.sampleCount);
+  pushLatencyHistory(metrics);
+renderLatencyChart();
 }
 
 function renderTopMovies(items) {
@@ -272,6 +372,7 @@ function connectWebSocket() {
 
 async function startDashboard() {
   setLoadingState();
+  renderLatencyChart();
 
   const snapshotLoaded = await loadInitialSnapshot();
 
