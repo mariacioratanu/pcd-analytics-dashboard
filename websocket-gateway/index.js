@@ -96,6 +96,10 @@ async function fetchTopMovies(limit = TOP_MOVIES_LIMIT) {
       updateTopMoviesCache(movie);
     });
 
+    if (!topMovies.length) {
+      return getTopMoviesFromMemory(limit);
+    }
+
     return topMovies;
   } catch (error) {
     console.error(JSON.stringify({ msg: "Failed to fetch top movies", error: error.message }));
