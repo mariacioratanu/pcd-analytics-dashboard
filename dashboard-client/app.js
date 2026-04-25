@@ -11,6 +11,9 @@ const p50El = document.getElementById("metric-p50");
 const p95El = document.getElementById("metric-p95");
 const p99El = document.getElementById("metric-p99");
 const samplesEl = document.getElementById("metric-samples");
+const totalBroadcastsEl = document.getElementById("metric-total-broadcasts");
+const coalescedUpdatesEl = document.getElementById("metric-coalesced-updates");
+const broadcastIntervalEl = document.getElementById("metric-broadcast-interval");
 const latencyChartEl = document.getElementById("latency-chart");
 const latencyChartCtx = latencyChartEl ? latencyChartEl.getContext("2d") : null;
 const latencyHistory = [];
@@ -170,6 +173,10 @@ function setLoadingState() {
   p99El.textContent = "loading...";
   samplesEl.textContent = "loading...";
 
+  totalBroadcastsEl.textContent = "loading...";
+coalescedUpdatesEl.textContent = "loading...";
+broadcastIntervalEl.textContent = "loading...";
+
   topMoviesEl.innerHTML = "";
   const topMoviesLoading = document.createElement("li");
   topMoviesLoading.textContent = "Loading top viewed movies...";
@@ -188,14 +195,17 @@ function setLoadingState() {
 
 function renderMetrics(metrics) {
   if (!metrics) {
-    totalUpdatesEl.textContent = "-";
-    latestLatencyEl.textContent = "-";
-    p50El.textContent = "-";
-    p95El.textContent = "-";
-    p99El.textContent = "-";
-    samplesEl.textContent = "-";
-    return;
-  }
+  totalUpdatesEl.textContent = "-";
+  latestLatencyEl.textContent = "-";
+  p50El.textContent = "-";
+  p95El.textContent = "-";
+  p99El.textContent = "-";
+  samplesEl.textContent = "-";
+  totalBroadcastsEl.textContent = "-";
+  coalescedUpdatesEl.textContent = "-";
+  broadcastIntervalEl.textContent = "-";
+  return;
+}
 
   totalUpdatesEl.textContent = formatMetric(metrics.totalUpdates);
   latestLatencyEl.textContent = formatMetric(metrics.latestLatencyMs);
@@ -203,6 +213,9 @@ function renderMetrics(metrics) {
   p95El.textContent = formatMetric(metrics.p95LatencyMs);
   p99El.textContent = formatMetric(metrics.p99LatencyMs);
   samplesEl.textContent = formatMetric(metrics.sampleCount);
+  totalBroadcastsEl.textContent = formatMetric(metrics.totalBroadcasts);
+coalescedUpdatesEl.textContent = formatMetric(metrics.coalescedUpdates);
+broadcastIntervalEl.textContent = formatMetric(metrics.broadcastIntervalMs);
   pushLatencyHistory(metrics);
 renderLatencyChart();
 }

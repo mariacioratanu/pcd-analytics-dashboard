@@ -9,6 +9,8 @@ app.use(express.json());
 const PORT = process.env.PORT || 8080;
 const ANALYTICS_COLLECTION = process.env.ANALYTICS_COLLECTION || "movie-stats";
 const TOP_MOVIES_LIMIT = Number(process.env.TOP_MOVIES_LIMIT || 10);
+const BACKPRESSURE_ENABLED = process.env.BACKPRESSURE_ENABLED !== "false";
+const BROADCAST_INTERVAL_MS = Number(process.env.BROADCAST_INTERVAL_MS || 1000);
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -21,6 +23,10 @@ let connectedClients = 0;
 let recentActivity = [];
 let latencySamples = [];
 let totalUpdates = 0;
+let totalBroadcasts = 0;
+let coalescedUpdates = 0;
+let pendingBroadcast = null;
+let broadcastTimer = null;
 let lastProcessedUpdate = null;
 
 function toMillis(value) {
@@ -42,14 +48,18 @@ function buildMetrics() {
   const sorted = [...latencySamples].sort((a, b) => a - b);
 
   return {
-    totalUpdates,
-    connectedClients,
-    sampleCount: sorted.length,
-    latestLatencyMs: sorted.length ? latencySamples[latencySamples.length - 1] : null,
-    p50LatencyMs: percentile(sorted, 50),
-    p95LatencyMs: percentile(sorted, 95),
-    p99LatencyMs: percentile(sorted, 99)
-  };
+  totalUpdates,
+  totalBroadcasts,
+  coalescedUpdates,
+  connectedClients,
+  sampleCount: sorted.length,
+  latestLatencyMs: sorted.length ? latencySamples[latencySamples.length - 1] : null,
+  p50LatencyMs: percentile(sorted, 50),
+  p95LatencyMs: percentile(sorted, 95),
+  p99LatencyMs: percentile(sorted, 99),
+  backpressureEnabled: BACKPRESSURE_ENABLED,
+  broadcastIntervalMs: BROADCAST_INTERVAL_MS
+};
 }
 
 function updateTopMoviesCache(movie) {
@@ -127,6 +137,37 @@ function broadcast(payload) {
       client.send(message);
     }
   }
+}
+
+function scheduleBroadcast(payload) {
+  if (!BACKPRESSURE_ENABLED) {
+    totalBroadcasts += 1;
+    broadcast(payload);
+    return;
+  }
+
+  if (pendingBroadcast) {
+    coalescedUpdates += 1;
+  }
+
+  pendingBroadcast = payload;
+
+  if (broadcastTimer) {
+    return;
+  }
+
+  broadcastTimer = setTimeout(() => {
+    if (pendingBroadcast) {
+      totalBroadcasts += 1;
+      broadcast({
+        ...pendingBroadcast,
+        metrics: buildMetrics()
+      });
+      pendingBroadcast = null;
+    }
+
+    broadcastTimer = null;
+  }, BROADCAST_INTERVAL_MS);
 }
 
 wss.on("connection", (ws) => {
@@ -254,15 +295,15 @@ app.post("/pubsub/push", async (req, res) => {
     const topMovies = await fetchTopMovies();
     const metrics = buildMetrics();
 
-    broadcast({
-      type: "dashboard_update",
-      connectedClients,
-      payload: enrichedPayload,
-      recentActivity,
-      lastProcessedUpdate,
-      topMovies,
-      metrics
-    });
+    scheduleBroadcast({
+  type: "dashboard_update",
+  connectedClients,
+  payload: enrichedPayload,
+  recentActivity,
+  lastProcessedUpdate,
+  topMovies,
+  metrics
+});
 
     res.status(200).json({ status: "broadcasted", metrics, topMoviesCount: topMovies.length });
   } catch (error) {
