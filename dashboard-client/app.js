@@ -1,6 +1,7 @@
 const statusEl = document.getElementById("status");
 const clientsEl = document.getElementById("clients");
 const activityEl = document.getElementById("activity");
+const topMoviesEl = document.getElementById("top-movies");
 const latencyMetricsEl = document.getElementById("latency-metrics");
 const gatewayUrlEl = document.getElementById("gateway-url");
 
@@ -46,6 +47,20 @@ function formatMetric(value) {
   return value === null || value === undefined ? "-" : String(value);
 }
 
+function formatDate(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+}
+
 function setLoadingState() {
   statusEl.textContent = "loading snapshot...";
   clientsEl.textContent = "loading...";
@@ -56,6 +71,11 @@ function setLoadingState() {
   p95El.textContent = "loading...";
   p99El.textContent = "loading...";
   samplesEl.textContent = "loading...";
+
+  topMoviesEl.innerHTML = "";
+  const topMoviesLoading = document.createElement("li");
+  topMoviesLoading.textContent = "Loading top viewed movies...";
+  topMoviesEl.appendChild(topMoviesLoading);
 
   activityEl.innerHTML = "";
   const activityLoading = document.createElement("li");
@@ -87,6 +107,27 @@ function renderMetrics(metrics) {
   samplesEl.textContent = formatMetric(metrics.sampleCount);
 }
 
+function renderTopMovies(items) {
+  topMoviesEl.innerHTML = "";
+
+  if (!items || !items.length) {
+    const li = document.createElement("li");
+    li.textContent = "No top movies available yet.";
+    topMoviesEl.appendChild(li);
+    return;
+  }
+
+  items.forEach((item, index) => {
+    const li = document.createElement("li");
+    const title = item.movieTitle || item.movieId || "Unknown movie";
+    const count = item.viewCount ?? "?";
+    const lastViewed = formatDate(item.lastViewed || item.updatedAt);
+
+    li.textContent = `#${index + 1} ${title} | views=${count} | lastViewed=${lastViewed}`;
+    topMoviesEl.appendChild(li);
+  });
+}
+
 function renderActivity(items) {
   activityEl.innerHTML = "";
 
@@ -101,7 +142,7 @@ function renderActivity(items) {
     const li = document.createElement("li");
     const title = item.movieTitle || item.movieId || "Unknown movie";
     const count = item.viewCount ?? "?";
-    const when = item.processedAt || item.lastViewed || "-";
+    const when = formatDate(item.processedAt || item.lastViewed);
     const latency = item.endToEndLatencyMs ?? "-";
 
     li.textContent = `${title} | views=${count} | processedAt=${when} | e2eLatencyMs=${latency}`;
@@ -120,10 +161,11 @@ function renderLastUpdate(payload) {
   }
 
   const li = document.createElement("li");
+
   li.textContent =
     `${payload.movieTitle || payload.movieId} | ` +
     `views=${payload.viewCount ?? "?"} | ` +
-    `processedAt=${payload.processedAt || "-"} | ` +
+    `processedAt=${formatDate(payload.processedAt)} | ` +
     `processingLatencyMs=${payload.processingLatencyMs ?? "-"} | ` +
     `gatewayLatencyMs=${payload.gatewayLatencyMs ?? "-"} | ` +
     `endToEndLatencyMs=${payload.endToEndLatencyMs ?? "-"}`;
@@ -142,6 +184,10 @@ function applyDashboardMessage(message) {
     renderMetrics(message.metrics);
   }
 
+  if (Array.isArray(message.topMovies)) {
+    renderTopMovies(message.topMovies);
+  }
+
   if (Array.isArray(message.recentActivity)) {
     renderActivity(message.recentActivity);
   }
@@ -157,7 +203,7 @@ async function loadInitialSnapshot() {
   try {
     const response = await fetch(`${snapshotUrl}/snapshot`, {
       method: "GET",
-      cache: "no-store",
+      cache: "no-store"
     });
 
     if (!response.ok) {
@@ -170,10 +216,11 @@ async function loadInitialSnapshot() {
     applyDashboardMessage({
       connectedClients: snapshot.connectedClients,
       metrics: snapshot.metrics || null,
+      topMovies: snapshot.topMovies || [],
       recentActivity: snapshot.recentActivity || [],
       lastProcessedUpdate:
         snapshot.lastProcessedUpdate ||
-        (snapshot.recentActivity && snapshot.recentActivity.length > 0 ? snapshot.recentActivity[0] : null),
+        (snapshot.recentActivity && snapshot.recentActivity.length > 0 ? snapshot.recentActivity[0] : null)
     });
 
     return true;
@@ -231,6 +278,7 @@ async function startDashboard() {
   if (!snapshotLoaded && !hasRenderedRealData) {
     clientsEl.textContent = "-";
     renderMetrics(null);
+    renderTopMovies([]);
     renderActivity([]);
     renderLastUpdate(null);
   }
