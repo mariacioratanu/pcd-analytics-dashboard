@@ -67,12 +67,20 @@ function updateTopMoviesCache(movie) {
     return;
   }
 
+  const current = topMoviesById.get(movie.movieId);
+  const incomingViewCount = movie.viewCount ?? 0;
+  const currentViewCount = current?.viewCount ?? 0;
+
+  if (current && incomingViewCount < currentViewCount) {
+    return;
+  }
+
   topMoviesById.set(movie.movieId, {
     movieId: movie.movieId,
-    movieTitle: movie.movieTitle || "Unknown movie",
-    viewCount: movie.viewCount ?? 0,
-    lastViewed: movie.lastViewed || movie.accessedAt || null,
-    updatedAt: movie.processedAt || movie.updatedAt || null
+    movieTitle: movie.movieTitle || current?.movieTitle || "Unknown movie",
+    viewCount: incomingViewCount,
+    lastViewed: movie.lastViewed || movie.accessedAt || current?.lastViewed || null,
+    updatedAt: movie.processedAt || movie.updatedAt || current?.updatedAt || null
   });
 }
 
