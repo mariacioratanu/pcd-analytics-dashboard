@@ -12,6 +12,8 @@ const TOP_MOVIES_LIMIT = Number(process.env.TOP_MOVIES_LIMIT || 10);
 const BACKPRESSURE_ENABLED = process.env.BACKPRESSURE_ENABLED !== "false";
 const BROADCAST_INTERVAL_MS = Number(process.env.BROADCAST_INTERVAL_MS || 1000);
 
+const ENABLE_DEBUG_ENDPOINTS = process.env.ENABLE_DEBUG_ENDPOINTS === "true";
+
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const firestore = new Firestore();
@@ -147,6 +149,21 @@ function broadcast(payload) {
   }
 }
 
+function resetRuntimeState() {
+  recentActivity = [];
+  latencySamples = [];
+  totalUpdates = 0;
+  totalBroadcasts = 0;
+  coalescedUpdates = 0;
+  pendingBroadcast = null;
+  lastProcessedUpdate = null;
+
+  if (broadcastTimer) {
+    clearTimeout(broadcastTimer);
+    broadcastTimer = null;
+  }
+}
+
 function scheduleBroadcast(payload) {
   if (!BACKPRESSURE_ENABLED) {
     totalBroadcasts += 1;
@@ -241,6 +258,34 @@ app.get("/top-movies", async (req, res) => {
     console.error(JSON.stringify({ msg: "Failed to fetch top movies", error: error.message }));
     res.status(500).json({ error: error.message });
   }
+});
+
+
+app.post("/debug/reset", async (req, res) => {
+  if (!ENABLE_DEBUG_ENDPOINTS) {
+    return res.status(404).json({ error: "Debug endpoints are disabled" });
+  }
+
+  resetRuntimeState();
+
+  const topMovies = await fetchTopMovies();
+  const metrics = buildMetrics();
+
+  broadcast({
+    type: "debug_reset",
+    connectedClients,
+    recentActivity,
+    lastProcessedUpdate,
+    topMovies,
+    metrics
+  });
+
+  res.json({
+    status: "reset",
+    connectedClients,
+    topMovies,
+    metrics
+  });
 });
 
 app.post("/pubsub/push", async (req, res) => {
