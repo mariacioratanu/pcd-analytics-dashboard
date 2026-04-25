@@ -25,7 +25,7 @@ const routes: RouteOptions[] = [
   {
     method: [HttpMethods.GET, HttpMethods.HEAD],
     url: endpoint,
-    schema: { ...FetchMovieSchema, tags: [...tags, RouteTags.CACHE] },
+    schema: { ...FetchMovieSchema, tags },
     handler: async function fetchMovie(request, reply) {
       const params = request.params as MovieIdObjectSchemaType;
       const movie = (await this.dataStore.fetchMovie(params.movie_id)) as MovieSchemaType;
