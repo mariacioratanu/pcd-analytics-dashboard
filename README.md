@@ -1,8 +1,12 @@
-# PCD Analytics Dashboard
+# PCD Cloud Distributed Applications
 
 **Course:** Concurrent and Distributed Programming  
-**Project:** Cloud Distributed Applications  
-**Selected assignment:** Project 1 — Real-Time Analytics Dashboard
+**Selected assignment:** Project 1 - Real-Time Analytics Dashboard
+
+**👥 Team members:**
+- Ciorâțanu Maria (MISS11)
+- Pâncă Aida-Gabriela (MISS11)
+- Varzar Alina-Miruna (MISS11)
 
 This repository contains a distributed cloud application built for the **Concurrent and Distributed Programming** course. The project extends the original **Fast Lazy Bee** REST API into an event-driven analytics system deployed on Google Cloud.
 
@@ -10,7 +14,7 @@ The system collects events when movie resources are accessed, processes them asy
 
 ---
 
-## 1. Project overview
+## ⚙️ 1. Project overview
 
 The goal of this project is to build a distributed cloud application that collects, processes, and displays real-time analytics about resource access.
 
