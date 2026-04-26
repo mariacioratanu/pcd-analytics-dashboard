@@ -14,6 +14,8 @@ const samplesEl = document.getElementById("metric-samples");
 const totalBroadcastsEl = document.getElementById("metric-total-broadcasts");
 const coalescedUpdatesEl = document.getElementById("metric-coalesced-updates");
 const broadcastIntervalEl = document.getElementById("metric-broadcast-interval");
+const clientConnectionsEl = document.getElementById("metric-client-connections");
+const clientDisconnectsEl = document.getElementById("metric-client-disconnects");
 const latencyChartEl = document.getElementById("latency-chart");
 const latencyChartCtx = latencyChartEl ? latencyChartEl.getContext("2d") : null;
 const latencyHistory = [];
@@ -176,6 +178,8 @@ function setLoadingState() {
   totalBroadcastsEl.textContent = "loading...";
 coalescedUpdatesEl.textContent = "loading...";
 broadcastIntervalEl.textContent = "loading...";
+clientConnectionsEl.textContent = "loading...";
+clientDisconnectsEl.textContent = "loading...";
 
   topMoviesEl.innerHTML = "";
   const topMoviesLoading = document.createElement("li");
@@ -204,6 +208,8 @@ function renderMetrics(metrics) {
   totalBroadcastsEl.textContent = "-";
   coalescedUpdatesEl.textContent = "-";
   broadcastIntervalEl.textContent = "-";
+  clientConnectionsEl.textContent = "-";
+clientDisconnectsEl.textContent = "-";
   return;
 }
 
@@ -216,6 +222,8 @@ function renderMetrics(metrics) {
   totalBroadcastsEl.textContent = formatMetric(metrics.totalBroadcasts);
 coalescedUpdatesEl.textContent = formatMetric(metrics.coalescedUpdates);
 broadcastIntervalEl.textContent = formatMetric(metrics.broadcastIntervalMs);
+clientConnectionsEl.textContent = formatMetric(metrics.totalClientConnections);
+clientDisconnectsEl.textContent = formatMetric(metrics.totalClientDisconnects);
   pushLatencyHistory(metrics);
 renderLatencyChart();
 }

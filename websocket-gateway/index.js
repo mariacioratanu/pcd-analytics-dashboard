@@ -22,6 +22,8 @@ const clients = new Set();
 const topMoviesById = new Map();
 
 let connectedClients = 0;
+let totalClientConnections = 0;
+let totalClientDisconnects = 0;
 let recentActivity = [];
 let latencySamples = [];
 let totalUpdates = 0;
@@ -30,7 +32,6 @@ let coalescedUpdates = 0;
 let pendingBroadcast = null;
 let broadcastTimer = null;
 let lastProcessedUpdate = null;
-
 function toMillis(value) {
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? ms : null;
@@ -54,7 +55,9 @@ function buildMetrics() {
   totalBroadcasts,
   coalescedUpdates,
   connectedClients,
-  sampleCount: sorted.length,
+totalClientConnections,
+totalClientDisconnects,
+sampleCount: sorted.length,
   latestLatencyMs: sorted.length ? latencySamples[latencySamples.length - 1] : null,
   p50LatencyMs: percentile(sorted, 50),
   p95LatencyMs: percentile(sorted, 95),
@@ -198,6 +201,7 @@ function scheduleBroadcast(payload) {
 wss.on("connection", (ws) => {
   clients.add(ws);
   connectedClients = clients.size;
+  totalClientConnections += 1;
 
   buildSnapshot()
     .then((snapshot) => {
@@ -225,15 +229,11 @@ wss.on("connection", (ws) => {
     });
 
   ws.on("close", () => {
-    clients.delete(ws);
-    connectedClients = clients.size;
-
-    broadcast({
-      type: "clients_count",
-      connectedClients,
-      metrics: buildMetrics()
-    });
-  });
+  clients.delete(ws);
+  connectedClients = clients.size;
+  totalClientDisconnects += 1;
+  broadcast({ type: "clients_count", connectedClients, metrics: buildMetrics() });
+});
 });
 
 app.get("/health", (req, res) => {
@@ -285,6 +285,26 @@ app.post("/debug/reset", async (req, res) => {
     connectedClients,
     topMovies,
     metrics
+  });
+});
+
+app.post("/debug/close-clients", (req, res) => {
+  if (!ENABLE_DEBUG_ENDPOINTS) {
+    return res.status(404).json({ error: "Debug endpoints are disabled" });
+  }
+
+  const closedClients = clients.size;
+
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.close(1012, "Debug reconnect test");
+    }
+  }
+
+  res.json({
+    status: "closing_clients",
+    closedClients,
+    message: "Connected WebSocket clients were asked to close. Dashboard clients should reconnect automatically."
   });
 });
 
