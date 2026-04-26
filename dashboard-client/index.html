@@ -556,14 +556,36 @@
     .recent-list {
       display: flex;
       flex-direction: column;
+      align-items: stretch;
       gap: 13px;
       max-height: 560px;
-      overflow: auto;
-      padding-right: 4px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 10px;
+      min-height: 0;
+    }
+
+    .recent-list::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    .recent-list::-webkit-scrollbar-track {
+      background: rgba(143, 90, 232, 0.08);
+      border-radius: 999px;
+    }
+
+    .recent-list::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, var(--purple-400), var(--green-400));
+      border-radius: 999px;
+    }
+
+    .recent-list::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, var(--purple-500), var(--green-500));
     }
 
     .recent-item {
       position: relative;
+      flex: 0 0 auto;
       padding: 15px;
       border-radius: 18px;
       background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 246, 252, 0.95));
