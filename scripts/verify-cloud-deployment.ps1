@@ -59,6 +59,10 @@ foreach ($Service in $RequiredRunServices) {
   Assert-True ($RunServices -contains $Service) "Cloud Run service exists: $Service"
 }
 
+$FinalCloudComponentCount = $RequiredRunServices.Count + 1
+Write-Host "Final cloud components count: $FinalCloudComponentCount"
+Write-Host "Counted components: fast-lazy-bee, websocket-gateway, dashboard-client, grpc-analytics-service, event-processor"
+
 Write-Step "Checking required Cloud Function"
 
 $FunctionsRaw = gcloud functions list --regions=$Region --format="value(name)"
