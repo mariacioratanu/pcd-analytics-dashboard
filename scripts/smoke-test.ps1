@@ -36,10 +36,12 @@ Write-Step "Reading Google Cloud project and service URLs"
 $ProjectId = gcloud config get-value project
 $FastUrl = gcloud run services describe fast-lazy-bee --region $Region --format="value(status.url)"
 $GatewayUrl = gcloud run services describe websocket-gateway --region $Region --format="value(status.url)"
+$DashboardUrl = gcloud run services describe dashboard-client --region $Region --format="value(status.url)"
 
 Write-Host "Project: $ProjectId"
 Write-Host "Fast Lazy Bee: $FastUrl"
 Write-Host "WebSocket Gateway: $GatewayUrl"
+Write-Host "Dashboard Client: $DashboardUrl"
 
 Assert-True (-not [string]::IsNullOrWhiteSpace($ProjectId)) "Google Cloud project is configured"
 Assert-True (-not [string]::IsNullOrWhiteSpace($FastUrl)) "Fast Lazy Bee URL was found"
@@ -54,6 +56,18 @@ Write-Step "Checking WebSocket Gateway health endpoint"
 
 $GatewayHealthStatus = curl.exe -s -o NUL -w "%{http_code}" "$GatewayUrl/health"
 Assert-True ($GatewayHealthStatus -eq "200") "WebSocket Gateway health returned HTTP 200"
+
+Write-Step "Checking Dashboard Client cloud deployment"
+
+$DashboardHealthStatus = curl.exe -s -o NUL -w "%{http_code}" "$DashboardUrl/health"
+Assert-True ($DashboardHealthStatus -eq "200") "Dashboard Client health returned HTTP 200"
+
+$DashboardConfigRaw = curl.exe -s "$DashboardUrl/config.js"
+Assert-True ($DashboardConfigRaw.Contains("window.DASHBOARD_CONFIG")) "Dashboard Client exposes runtime config.js"
+Assert-True ($DashboardConfigRaw.Contains("wss://")) "Dashboard Client config contains WebSocket URL"
+
+$DashboardHtmlStatus = curl.exe -s -o NUL -w "%{http_code}" "$DashboardUrl/"
+Assert-True ($DashboardHtmlStatus -eq "200") "Dashboard Client root page returned HTTP 200"
 
 Write-Step "Checking dedicated metrics endpoint"
 
@@ -112,6 +126,7 @@ Write-Host "Summary:"
 Write-Host "Project: $ProjectId"
 Write-Host "Fast Lazy Bee: $FastUrl"
 Write-Host "WebSocket Gateway: $GatewayUrl"
+Write-Host "Dashboard Client: $DashboardUrl"
 Write-Host "Processed updates: $($Snapshot.metrics.totalUpdates)"
 Write-Host "Latency samples: $($Snapshot.metrics.sampleCount)"
 Write-Host "Latest end-to-end latency: $($Snapshot.metrics.latestLatencyMs) ms"
