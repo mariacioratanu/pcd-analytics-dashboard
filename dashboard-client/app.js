@@ -479,50 +479,69 @@ function renderRecentActivity() {
 function renderLatencyChart() {
   const canvas = els.latencyChart;
   const ctx = canvas.getContext('2d');
-  const width = canvas.width;
-  const height = canvas.height;
+
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(rect.width, 900);
+  const height = Math.max(rect.height, 420);
+
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   ctx.clearRect(0, 0, width, height);
 
   const points = state.latencySeries.slice(-MAX_CHART_POINTS);
   const metrics = state.metrics || {};
 
+  const colors = {
+    text: '#261f38',
+    textSoft: '#5b536f',
+    textMuted: '#7a7390',
+    grid: 'rgba(91, 83, 111, 0.16)',
+    axis: 'rgba(91, 83, 111, 0.24)',
+    purple: '#8f5ae8',
+    green: '#3ead72',
+    gold: '#dca84a',
+    lineStart: '#8f5ae8',
+    lineEnd: '#3ead72'
+  };
+
   const percentileLines = [
     {
       label: 'p50',
       value: metrics.p50LatencyMs,
-      stroke: '#8f5ae8',
-      background: 'rgba(143, 90, 232, 0.12)'
+      stroke: colors.purple,
+      background: 'rgba(143, 90, 232, 0.13)'
     },
     {
       label: 'p95',
       value: metrics.p95LatencyMs,
-      stroke: '#3ead72',
-      background: 'rgba(62, 173, 114, 0.12)'
+      stroke: colors.green,
+      background: 'rgba(62, 173, 114, 0.13)'
     },
     {
       label: 'p99',
       value: metrics.p99LatencyMs,
-      stroke: '#dca84a',
-      background: 'rgba(220, 168, 74, 0.14)'
+      stroke: colors.gold,
+      background: 'rgba(220, 168, 74, 0.16)'
     }
   ].filter(
     (item) => typeof item.value === 'number' && Number.isFinite(item.value) && item.value >= 0
   );
 
   const candidateValues = [...points, ...percentileLines.map((item) => item.value), 100];
-
   const maxValueRaw = Math.max(...candidateValues);
-  const maxValue = Math.ceil(maxValueRaw / 100) * 100;
+  const maxValue = Math.max(100, Math.ceil(maxValueRaw / 100) * 100);
   const minValue = 0;
 
-  const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-  bgGradient.addColorStop(0, 'rgba(181, 167, 255, 0.12)');
-  bgGradient.addColorStop(1, 'rgba(142, 228, 182, 0.03)');
-  ctx.fillStyle = bgGradient;
-  ctx.fillRect(0, 0, width, height);
+  const padding = {
+    top: 62,
+    right: 112,
+    bottom: 48,
+    left: 82
+  };
 
-  const padding = { top: 46, right: 86, bottom: 36, left: 54 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
@@ -531,10 +550,17 @@ function renderLatencyChart() {
   const getY = (value) =>
     padding.top + chartH - ((value - minValue) / Math.max(maxValue - minValue, 1)) * chartH;
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+  bgGradient.addColorStop(0, 'rgba(255, 255, 255, 0.98)');
+  bgGradient.addColorStop(0.45, 'rgba(248, 246, 255, 0.96)');
+  bgGradient.addColorStop(1, 'rgba(241, 252, 247, 0.9)');
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = colors.grid;
   ctx.lineWidth = 1;
 
-  for (let i = 0; i <= 4; i++) {
+  for (let i = 0; i <= 4; i += 1) {
     const y = padding.top + (chartH / 4) * i;
     ctx.beginPath();
     ctx.moveTo(padding.left, y);
@@ -542,78 +568,109 @@ function renderLatencyChart() {
     ctx.stroke();
   }
 
-  ctx.fillStyle = 'rgba(255,255,255,0.68)';
-  ctx.font = '12px Inter, sans-serif';
-  ctx.textAlign = 'right';
+  ctx.strokeStyle = colors.axis;
+  ctx.lineWidth = 1.2;
 
-  for (let i = 0; i <= 4; i++) {
+  ctx.beginPath();
+  ctx.moveTo(padding.left, padding.top);
+  ctx.lineTo(padding.left, padding.top + chartH);
+  ctx.lineTo(width - padding.right, padding.top + chartH);
+  ctx.stroke();
+
+  ctx.fillStyle = colors.textSoft;
+  ctx.font = '700 13px Inter, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+
+  for (let i = 0; i <= 4; i += 1) {
     const value = Math.round(maxValue - ((maxValue - minValue) / 4) * i);
     const y = padding.top + (chartH / 4) * i;
-    ctx.fillText(`${value} ms`, padding.left - 9, y + 4);
+    ctx.fillText(`${value} ms`, padding.left - 14, y);
   }
 
   ctx.textAlign = 'left';
-  ctx.font = '12px Inter, sans-serif';
+  ctx.textBaseline = 'alphabetic';
 
   let legendX = padding.left;
-  const legendY = 20;
+  const legendY = 30;
 
   const legendItems = [
-    { label: 'end-to-end latency', stroke: '#b5a7ff' },
+    {
+      label: 'end-to-end latency',
+      stroke: colors.lineStart
+    },
     ...percentileLines.map((item) => ({
       label: `${item.label}: ${Math.round(item.value)} ms`,
       stroke: item.stroke
     }))
   ];
 
+  ctx.font = '700 13px Inter, sans-serif';
+
   for (const item of legendItems) {
+    const labelWidth = ctx.measureText(item.label).width;
+    const availableWidth = width - padding.right - legendX;
+
+    if (availableWidth < labelWidth + 34) {
+      break;
+    }
+
     ctx.fillStyle = item.stroke;
     ctx.beginPath();
-    ctx.arc(legendX + 6, legendY - 4, 5, 0, Math.PI * 2);
+    ctx.arc(legendX + 7, legendY - 5, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = 'rgba(255,255,255,0.78)';
-    ctx.fillText(item.label, legendX + 17, legendY);
+    ctx.fillStyle = colors.text;
+    ctx.fillText(item.label, legendX + 20, legendY);
 
-    legendX += ctx.measureText(item.label).width + 46;
+    legendX += labelWidth + 54;
   }
 
   for (const item of percentileLines) {
     const y = getY(item.value);
 
     ctx.save();
-    ctx.setLineDash([8, 6]);
+    ctx.setLineDash([9, 7]);
     ctx.strokeStyle = item.stroke;
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(padding.left, y);
     ctx.lineTo(width - padding.right, y);
     ctx.stroke();
     ctx.restore();
 
+    const tagX = width - padding.right + 16;
+    const tagY = y - 14;
+
     ctx.fillStyle = item.background;
-    ctx.fillRect(width - padding.right + 8, y - 13, 58, 24);
+    ctx.beginPath();
+    ctx.roundRect(tagX, tagY, 66, 28, 8);
+    ctx.fill();
 
     ctx.strokeStyle = item.stroke;
-    ctx.strokeRect(width - padding.right + 8, y - 13, 58, 24);
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
 
     ctx.fillStyle = item.stroke;
-    ctx.font = 'bold 12px Inter, sans-serif';
+    ctx.font = '900 13px Inter, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${item.label}`, width - padding.right + 37, y + 4);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(item.label, tagX + 33, y);
   }
 
   if (points.length === 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    ctx.font = '14px Inter, sans-serif';
+    ctx.fillStyle = colors.textMuted;
+    ctx.font = '700 16px Inter, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('No latency samples yet', width / 2, height / 2);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Waiting for latency samples...', width / 2, height / 2);
     return;
   }
 
   const areaGradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
-  areaGradient.addColorStop(0, 'rgba(94, 212, 156, 0.28)');
-  areaGradient.addColorStop(1, 'rgba(145, 124, 255, 0.02)');
+  areaGradient.addColorStop(0, 'rgba(62, 173, 114, 0.22)');
+  areaGradient.addColorStop(0.55, 'rgba(143, 90, 232, 0.08)');
+  areaGradient.addColorStop(1, 'rgba(143, 90, 232, 0.01)');
 
   ctx.beginPath();
   ctx.moveTo(getX(0), getY(points[0]));
@@ -642,11 +699,13 @@ function renderLatencyChart() {
   });
 
   const strokeGradient = ctx.createLinearGradient(padding.left, 0, width - padding.right, 0);
-  strokeGradient.addColorStop(0, '#b5a7ff');
-  strokeGradient.addColorStop(1, '#8ee4b6');
+  strokeGradient.addColorStop(0, colors.lineStart);
+  strokeGradient.addColorStop(1, colors.lineEnd);
 
   ctx.strokeStyle = strokeGradient;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3.2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
   ctx.stroke();
 
   points.forEach((value, index) => {
@@ -654,13 +713,17 @@ function renderLatencyChart() {
     const y = getY(value);
 
     ctx.beginPath();
-    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#8ee4b6';
+    ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
     ctx.fill();
+
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = colors.green;
+    ctx.stroke();
 
     ctx.beginPath();
     ctx.arc(x, y, 2.2, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = colors.purple;
     ctx.fill();
   });
 
@@ -668,18 +731,31 @@ function renderLatencyChart() {
   const latestX = getX(points.length - 1);
   const latestY = getY(latestValue);
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-  ctx.strokeStyle = 'rgba(143, 90, 232, 0.22)';
-  ctx.lineWidth = 1;
+  const latestBoxWidth = 136;
+  const latestBoxHeight = 32;
+  const latestBoxX = Math.min(
+    Math.max(latestX - latestBoxWidth / 2, padding.left),
+    width - padding.right - latestBoxWidth
+  );
+  const latestBoxY = Math.max(latestY - 46, padding.top + 6);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+  ctx.strokeStyle = 'rgba(143, 90, 232, 0.24)';
+  ctx.lineWidth = 1.4;
   ctx.beginPath();
-  ctx.roundRect(latestX - 58, latestY - 38, 116, 27, 10);
+  ctx.roundRect(latestBoxX, latestBoxY, latestBoxWidth, latestBoxHeight, 11);
   ctx.fill();
   ctx.stroke();
 
-  ctx.fillStyle = '#261f38';
-  ctx.font = 'bold 12px Inter, sans-serif';
+  ctx.fillStyle = colors.text;
+  ctx.font = '900 13px Inter, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`latest ${Math.round(latestValue)} ms`, latestX, latestY - 20);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(
+    `latest ${Math.round(latestValue)} ms`,
+    latestBoxX + latestBoxWidth / 2,
+    latestBoxY + latestBoxHeight / 2
+  );
 }
 
 function renderAll() {
