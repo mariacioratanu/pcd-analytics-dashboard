@@ -51,7 +51,8 @@ $RunServices = @($RunServicesRaw)
 $RequiredRunServices = @(
   "fast-lazy-bee",
   "websocket-gateway",
-  "dashboard-client"
+  "dashboard-client",
+  "grpc-analytics-service"
 )
 
 foreach ($Service in $RequiredRunServices) {
@@ -70,14 +71,17 @@ Write-Step "Reading service URLs"
 $FastUrl = gcloud run services describe fast-lazy-bee --region $Region --format="value(status.url)"
 $GatewayUrl = gcloud run services describe websocket-gateway --region $Region --format="value(status.url)"
 $DashboardUrl = gcloud run services describe dashboard-client --region $Region --format="value(status.url)"
+$GrpcAnalyticsUrl = gcloud run services describe grpc-analytics-service --region $Region --format="value(status.url)"
 
 Assert-True (-not [string]::IsNullOrWhiteSpace($FastUrl)) "Fast Lazy Bee URL exists"
 Assert-True (-not [string]::IsNullOrWhiteSpace($GatewayUrl)) "WebSocket Gateway URL exists"
 Assert-True (-not [string]::IsNullOrWhiteSpace($DashboardUrl)) "Dashboard Client URL exists"
+Assert-True (-not [string]::IsNullOrWhiteSpace($GrpcAnalyticsUrl)) "gRPC Analytics Service URL exists"
 
 Write-Host "Fast Lazy Bee: $FastUrl"
 Write-Host "WebSocket Gateway: $GatewayUrl"
 Write-Host "Dashboard Client: $DashboardUrl"
+Write-Host "gRPC Analytics Service: $GrpcAnalyticsUrl"
 
 Write-Step "Checking Pub/Sub topics"
 
@@ -117,6 +121,9 @@ Assert-Contains $GatewayEnvText "BACKPRESSURE_ENABLED" "Gateway has BACKPRESSURE
 Assert-Contains $GatewayEnvText "BROADCAST_INTERVAL_MS" "Gateway has BROADCAST_INTERVAL_MS configured"
 Assert-Contains $GatewayEnvText "ENABLE_DEBUG_ENDPOINTS" "Gateway has ENABLE_DEBUG_ENDPOINTS configured"
 Assert-Contains $GatewayEnvText "DEBUG_TOKEN" "Gateway has DEBUG_TOKEN configured"
+Assert-Contains $GatewayEnvText "ENABLE_GRPC_ANALYTICS" "Gateway has ENABLE_GRPC_ANALYTICS configured"
+Assert-Contains $GatewayEnvText "GRPC_ANALYTICS_TARGET" "Gateway has GRPC_ANALYTICS_TARGET configured"
+Assert-Contains $GatewayEnvText "GRPC_DEADLINE_MS" "Gateway has GRPC_DEADLINE_MS configured"
 
 Write-Step "Checking Dashboard Client environment variables"
 
@@ -125,6 +132,15 @@ $DashboardEnvText = $DashboardEnvRaw -join "`n"
 
 Assert-Contains $DashboardEnvText "WS_URL" "Dashboard Client has WS_URL configured"
 Assert-Contains $DashboardEnvText "wss://" "Dashboard Client points to WebSocket Gateway over wss"
+
+Write-Step "Checking gRPC Analytics Service environment variables"
+
+$GrpcEnvRaw = gcloud run services describe grpc-analytics-service --region $Region --format="yaml(spec.template.spec.containers[0].env)"
+$GrpcEnvText = $GrpcEnvRaw -join "`n"
+
+Assert-Contains $GrpcEnvText "ANALYTICS_COLLECTION" "gRPC Analytics Service has ANALYTICS_COLLECTION configured"
+Assert-Contains $GrpcEnvText "movie-stats" "gRPC Analytics Service reads movie-stats collection"
+Assert-Contains $GrpcEnvText "TOP_MOVIES_LIMIT" "gRPC Analytics Service has TOP_MOVIES_LIMIT configured"
 
 Write-Step "Checking Cloud Function environment variables"
 
@@ -165,6 +181,34 @@ $DashboardConfigRaw = curl.exe -s "$DashboardUrl/config.js"
 Assert-True ($DashboardConfigRaw.Contains("window.DASHBOARD_CONFIG")) "Dashboard Client exposes runtime config.js"
 Assert-True ($DashboardConfigRaw.Contains("wss://")) "Dashboard Client config points to WebSocket URL"
 
+Write-Step "Checking gRPC analytics integration"
+
+$GatewayHealthRaw = curl.exe -s "$GatewayUrl/health"
+$GatewayHealth = $GatewayHealthRaw | ConvertFrom-Json
+
+Assert-True ($GatewayHealth.grpcAnalyticsEnabled -eq $true) "Gateway reports gRPC analytics enabled"
+Assert-True ($GatewayHealth.grpcAnalyticsConfigured -eq $true) "Gateway reports gRPC analytics configured"
+
+$GrpcTopMoviesRaw = curl.exe -s "$GatewayUrl/grpc/top-movies"
+$GrpcTopMovies = $GrpcTopMoviesRaw | ConvertFrom-Json
+
+Assert-True ($GrpcTopMovies.source -eq "grpc") "Gateway /grpc/top-movies uses gRPC"
+Assert-True ($GrpcTopMovies.grpcAnalyticsEnabled -eq $true) "Gateway /grpc/top-movies reports gRPC enabled"
+
+$TopMoviesRaw = curl.exe -s "$GatewayUrl/top-movies"
+$TopMovies = $TopMoviesRaw | ConvertFrom-Json
+
+Assert-True ($TopMovies.source -eq "grpc") "Gateway /top-movies uses gRPC before fallback"
+Assert-True ($null -eq $TopMovies.lastGrpcError) "Gateway /top-movies reports no gRPC error"
+
+$GatewayMetricsRaw = curl.exe -s "$GatewayUrl/metrics"
+$GatewayMetrics = $GatewayMetricsRaw | ConvertFrom-Json
+
+Assert-True ($GatewayMetrics.state.topMoviesSource -eq "grpc") "Gateway metrics report topMoviesSource=grpc"
+Assert-True ($GatewayMetrics.state.grpcAnalyticsEnabled -eq $true) "Gateway metrics report gRPC enabled"
+Assert-True ($GatewayMetrics.state.grpcAnalyticsTargetConfigured -eq $true) "Gateway metrics report gRPC target configured"
+Assert-True ($null -eq $GatewayMetrics.state.lastGrpcError) "Gateway metrics report no gRPC error"
+
 Write-Step "Checking debug endpoint protection"
 
 $UnauthorizedDebugStatus = curl.exe -s -o NUL -w "%{http_code}" -X POST -H "Content-Type: application/json" --data "{}" "$GatewayUrl/debug/reset"
@@ -174,14 +218,16 @@ Write-Host ""
 Write-Host "Final cloud deployment verification completed successfully." -ForegroundColor Green
 Write-Host ""
 Write-Host "Verified components:"
-Write-Host "- fast-lazy-bee        $FastUrl"
-Write-Host "- event-processor      Cloud Function Gen2 in $Region"
-Write-Host "- websocket-gateway    $GatewayUrl"
-Write-Host "- dashboard-client     $DashboardUrl"
+Write-Host "- fast-lazy-bee             $FastUrl"
+Write-Host "- event-processor           Cloud Function Gen2 in $Region"
+Write-Host "- websocket-gateway         $GatewayUrl"
+Write-Host "- dashboard-client          $DashboardUrl"
+Write-Host "- grpc-analytics-service    $GrpcAnalyticsUrl"
 Write-Host ""
 Write-Host "Verified cloud services:"
 Write-Host "- Cloud Run"
 Write-Host "- Cloud Functions Gen2"
 Write-Host "- Pub/Sub"
 Write-Host "- Firestore-backed runtime state"
+Write-Host "- gRPC internal service communication"
 Write-Host ""
