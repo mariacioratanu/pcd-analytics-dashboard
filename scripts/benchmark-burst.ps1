@@ -3,7 +3,8 @@ param(
   [string]$MovieId = "573a1390f29313caabcd42e8",
   [int]$Requests = 20,
   [int]$WaitSeconds = 15,
-  [string]$OutputDir = "benchmark-results"
+  [string]$OutputDir = "benchmark-results",
+  [string]$DebugToken = $env:DEBUG_TOKEN
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,7 +23,11 @@ Write-Host "MovieId: $MovieId"
 Write-Host "Requests: $Requests"
 
 Write-Host "Resetting gateway runtime metrics..."
-curl.exe -s -X POST -H "Content-Type: application/json" --data "{}" "$GatewayUrl/debug/reset" | Out-Null
+if ([string]::IsNullOrWhiteSpace($DebugToken)) {
+  curl.exe -s -X POST -H "Content-Type: application/json" --data "{}" "$GatewayUrl/debug/reset" | Out-Null
+} else {
+  curl.exe -s -X POST -H "Content-Type: application/json" -H "x-debug-token: $DebugToken" --data "{}" "$GatewayUrl/debug/reset" | Out-Null
+}
 
 Start-Sleep -Seconds 2
 

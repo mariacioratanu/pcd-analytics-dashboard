@@ -13,6 +13,7 @@ const BACKPRESSURE_ENABLED = process.env.BACKPRESSURE_ENABLED !== "false";
 const BROADCAST_INTERVAL_MS = Number(process.env.BROADCAST_INTERVAL_MS || 1000);
 
 const ENABLE_DEBUG_ENDPOINTS = process.env.ENABLE_DEBUG_ENDPOINTS === "true";
+const DEBUG_TOKEN = process.env.DEBUG_TOKEN || "";
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -152,6 +153,24 @@ function broadcast(payload) {
   }
 }
 
+function isDebugRequestAuthorized(req) {
+  if (!ENABLE_DEBUG_ENDPOINTS) {
+    return { ok: false, status: 404, body: { error: "Debug endpoints are disabled" } };
+  }
+
+  if (!DEBUG_TOKEN) {
+    return { ok: true };
+  }
+
+  const providedToken = req.header("x-debug-token");
+
+  if (providedToken !== DEBUG_TOKEN) {
+    return { ok: false, status: 403, body: { error: "Invalid or missing debug token" } };
+  }
+
+  return { ok: true };
+}
+
 function resetRuntimeState() {
   recentActivity = [];
   latencySamples = [];
@@ -279,8 +298,9 @@ app.get("/top-movies", async (req, res) => {
 
 
 app.post("/debug/reset", async (req, res) => {
-  if (!ENABLE_DEBUG_ENDPOINTS) {
-    return res.status(404).json({ error: "Debug endpoints are disabled" });
+  const auth = isDebugRequestAuthorized(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json(auth.body);
   }
 
   resetRuntimeState();
@@ -306,10 +326,10 @@ app.post("/debug/reset", async (req, res) => {
 });
 
 app.post("/debug/close-clients", (req, res) => {
-  if (!ENABLE_DEBUG_ENDPOINTS) {
-    return res.status(404).json({ error: "Debug endpoints are disabled" });
+  const auth = isDebugRequestAuthorized(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json(auth.body);
   }
-
   const closedClients = clients.size;
 
   for (const client of clients) {

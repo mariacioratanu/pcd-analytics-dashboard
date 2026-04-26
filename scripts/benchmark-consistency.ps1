@@ -4,7 +4,8 @@ param(
   [int]$Trials = 5,
   [int]$PollIntervalMs = 500,
   [int]$TimeoutSeconds = 30,
-  [string]$OutputDir = "benchmark-results"
+  [string]$OutputDir = "benchmark-results",
+  [string]$DebugToken = $env:DEBUG_TOKEN
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,7 +30,11 @@ for ($trial = 1; $trial -le $Trials; $trial++) {
   Write-Host "Trial $trial/$Trials"
   Write-Host "Resetting gateway runtime metrics..."
 
+  if ([string]::IsNullOrWhiteSpace($DebugToken)) {
   curl.exe -s -X POST -H "Content-Type: application/json" --data "{}" "$GatewayUrl/debug/reset" | Out-Null
+} else {
+  curl.exe -s -X POST -H "Content-Type: application/json" -H "x-debug-token: $DebugToken" --data "{}" "$GatewayUrl/debug/reset" | Out-Null
+}
   Start-Sleep -Seconds 2
 
   $StartUtc = (Get-Date).ToUniversalTime()
