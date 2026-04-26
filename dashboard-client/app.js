@@ -56,6 +56,14 @@ function formatMetric(value) {
   return value === null || value === undefined ? "-" : String(value);
 }
 
+function formatShortId(value) {
+  if (!value) {
+    return "-";
+  }
+
+  return String(value).slice(0, 8);
+}
+
 function formatDate(value) {
   if (!value) {
     return "-";
@@ -265,8 +273,9 @@ function renderActivity(items) {
     const count = item.viewCount ?? "?";
     const when = formatDate(item.processedAt || item.lastViewed);
     const latency = item.endToEndLatencyMs ?? "-";
-
-    li.textContent = `${title} | views=${count} | processedAt=${when} | e2eLatencyMs=${latency}`;
+    
+    const eventId = formatShortId(item.eventId || item.messageId);
+    li.textContent = `${title} | views=${count} | event=${eventId} | processedAt=${when} | e2eLatencyMs=${latency}`;
     activityEl.appendChild(li);
   });
 }
@@ -284,12 +293,13 @@ function renderLastUpdate(payload) {
   const li = document.createElement("li");
 
   li.textContent =
-    `${payload.movieTitle || payload.movieId} | ` +
-    `views=${payload.viewCount ?? "?"} | ` +
-    `processedAt=${formatDate(payload.processedAt)} | ` +
-    `processingLatencyMs=${payload.processingLatencyMs ?? "-"} | ` +
-    `gatewayLatencyMs=${payload.gatewayLatencyMs ?? "-"} | ` +
-    `endToEndLatencyMs=${payload.endToEndLatencyMs ?? "-"}`;
+  `${payload.movieTitle || payload.movieId} | ` +
+  `views=${payload.viewCount ?? "?"} | ` +
+  `event=${eventId} | ` +
+  `processedAt=${payload.processedAt || "-"} | ` +
+  `processingLatencyMs=${payload.processingLatencyMs ?? "-"} | ` +
+  `gatewayLatencyMs=${payload.gatewayLatencyMs ?? "-"} | ` +
+  `endToEndLatencyMs=${payload.endToEndLatencyMs ?? "-"}`;
 
   latencyMetricsEl.appendChild(li);
 }

@@ -95,9 +95,10 @@ exports.processResourceEvent = async (cloudEvent) => {
     throw new Error("No Pub/Sub payload received");
   }
 
-  const messageId = rawMessageId || buildFallbackMessageId(base64Data);
-  const payload = decodePayload(base64Data);
-  const movieId = payload.movieId || "unknown-movie";
+const payload = decodePayload(base64Data);
+const eventId = payload.eventId || rawMessageId || buildFallbackMessageId(base64Data);
+const messageId = rawMessageId || eventId;
+const movieId = payload.movieId || "unknown-movie";
   const movieTitle = payload.movieTitle || "Unknown";
   const accessedAt = payload.accessedAt || payload.viewedAt || new Date().toISOString();
   const processedAt = new Date().toISOString();
@@ -139,9 +140,11 @@ exports.processResourceEvent = async (cloudEvent) => {
     }
 
     tx.set(processedRef, {
-      processedAt,
-      movieId
-    });
+  eventId,
+  messageId,
+  processedAt,
+  movieId
+});
   });
 
   if (duplicate) {
@@ -152,9 +155,11 @@ exports.processResourceEvent = async (cloudEvent) => {
   const updatedDoc = await statsRef.get();
   const stats = updatedDoc.data();
 
-  const dashboardPayload = {
-    type: "movie_viewed_processed",
-    movieId: stats.movieId,
+const dashboardPayload = {
+  type: "movie_viewed_processed",
+  eventId,
+  messageId,
+  movieId: stats.movieId,
     movieTitle: stats.movieTitle,
     viewCount: stats.viewCount,
     accessedAt,
@@ -174,10 +179,11 @@ exports.processResourceEvent = async (cloudEvent) => {
   }
 
   console.log(JSON.stringify({
-    msg: "Event processed",
-    messageId,
-    movieId,
-    viewCount: stats.viewCount,
-    processingLatencyMs
-  }));
+  msg: "Event processed",
+  eventId,
+  messageId,
+  movieId,
+  viewCount: stats.viewCount,
+  processingLatencyMs
+}));
 };
