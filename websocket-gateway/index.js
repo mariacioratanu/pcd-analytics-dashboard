@@ -250,6 +250,23 @@ app.get("/snapshot", async (req, res) => {
   }
 });
 
+app.get("/metrics", async (req, res) => {
+  const topMovies = await fetchTopMovies();
+  const metrics = buildMetrics();
+
+  res.json({
+    service: "websocket-gateway",
+    generatedAt: new Date().toISOString(),
+    metrics,
+    state: {
+      connectedClients,
+      recentActivityCount: recentActivity.length,
+      topMoviesCount: topMovies.length,
+      hasLastProcessedUpdate: lastProcessedUpdate !== null
+    }
+  });
+});
+
 app.get("/top-movies", async (req, res) => {
   try {
     const topMovies = await fetchTopMovies();
