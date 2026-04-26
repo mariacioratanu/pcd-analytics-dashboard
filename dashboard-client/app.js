@@ -415,7 +415,20 @@ function renderLastProcessed() {
 }
 
 function renderRecentActivity() {
-  const items = Array.isArray(state.recentActivity) ? state.recentActivity : [];
+  const items = Array.isArray(state.recentActivity)
+    ? [...state.recentActivity].sort((a, b) => {
+      const viewCountDiff = (b?.viewCount ?? 0) - (a?.viewCount ?? 0);
+
+      if (viewCountDiff !== 0) {
+        return viewCountDiff;
+      }
+
+      const bTime = Date.parse(b?.gatewayReceivedAt || b?.processedAt || b?.accessedAt || b?.lastViewed || 0);
+      const aTime = Date.parse(a?.gatewayReceivedAt || a?.processedAt || a?.accessedAt || a?.lastViewed || 0);
+
+      return bTime - aTime;
+    })
+    : [];
   els.recentActivityCountBadge.textContent = `${items.length} item${items.length === 1 ? '' : 's'}`;
 
   if (items.length === 0) {
