@@ -1,421 +1,645 @@
-const statusEl = document.getElementById("status");
-const clientsEl = document.getElementById("clients");
-const activityEl = document.getElementById("activity");
-const topMoviesEl = document.getElementById("top-movies");
-const latencyMetricsEl = document.getElementById("latency-metrics");
-const gatewayUrlEl = document.getElementById("gateway-url");
+const MAX_RECENT_ITEMS = 20;
+const MAX_CHART_POINTS = 20;
 
-const totalUpdatesEl = document.getElementById("metric-total-updates");
-const latestLatencyEl = document.getElementById("metric-latest-latency");
-const p50El = document.getElementById("metric-p50");
-const p95El = document.getElementById("metric-p95");
-const p99El = document.getElementById("metric-p99");
-const samplesEl = document.getElementById("metric-samples");
-const totalBroadcastsEl = document.getElementById("metric-total-broadcasts");
-const coalescedUpdatesEl = document.getElementById("metric-coalesced-updates");
-const broadcastIntervalEl = document.getElementById("metric-broadcast-interval");
-const clientConnectionsEl = document.getElementById("metric-client-connections");
-const clientDisconnectsEl = document.getElementById("metric-client-disconnects");
-const latencyChartEl = document.getElementById("latency-chart");
-const latencyChartCtx = latencyChartEl ? latencyChartEl.getContext("2d") : null;
-const latencyHistory = [];
-const MAX_LATENCY_HISTORY = 40;
+const state = {
+  metrics: {
+    totalUpdates: 0,
+    totalBroadcasts: 0,
+    coalescedUpdates: 0,
+    connectedClients: 0,
+    totalClientConnections: 0,
+    totalClientDisconnects: 0,
+    sampleCount: 0,
+    latestLatencyMs: null,
+    p50LatencyMs: null,
+    p95LatencyMs: null,
+    p99LatencyMs: null,
+    backpressureEnabled: false,
+    broadcastIntervalMs: null
+  },
+  topMovies: [],
+  recentActivity: [],
+  lastProcessedUpdate: null,
+  latencySeries: []
+};
 
-const params = new URLSearchParams(window.location.search);
-
-let gatewayUrl =
-  params.get("ws") ||
-  params.get("gateway") ||
-  localStorage.getItem("gatewayUrl") ||
-  "ws://localhost:8080";
-
-gatewayUrl = gatewayUrl.trim();
-
-if (gatewayUrl.startsWith("https://")) {
-  gatewayUrl = "wss://" + gatewayUrl.slice("https://".length);
-}
-
-if (gatewayUrl.startsWith("http://")) {
-  gatewayUrl = "ws://" + gatewayUrl.slice("http://".length);
-}
-
-const snapshotUrl = gatewayUrl.startsWith("wss://")
-  ? "https://" + gatewayUrl.slice("wss://".length)
-  : gatewayUrl.startsWith("ws://")
-    ? "http://" + gatewayUrl.slice("ws://".length)
-    : gatewayUrl;
-
-localStorage.setItem("gatewayUrl", gatewayUrl);
-gatewayUrlEl.textContent = gatewayUrl;
-
+let ws = null;
+let reconnectAttempts = 0;
 let reconnectTimer = null;
-let reconnectAttempt = 0;
-let hasRenderedRealData = false;
 
-function formatMetric(value) {
-  return value === null || value === undefined ? "-" : String(value);
+const els = {
+  connectionStatus: document.getElementById('connectionStatus'),
+  connectionStatusText: document.getElementById('connectionStatusText'),
+  wsEndpoint: document.getElementById('wsEndpoint'),
+  httpEndpoint: document.getElementById('httpEndpoint'),
+  lastUiUpdate: document.getElementById('lastUiUpdate'),
+  reconnectAttempts: document.getElementById('reconnectAttempts'),
+
+  connectedClients: document.getElementById('connectedClients'),
+  totalUpdates: document.getElementById('totalUpdates'),
+  totalBroadcasts: document.getElementById('totalBroadcasts'),
+  coalescedUpdates: document.getElementById('coalescedUpdates'),
+  latestLatency: document.getElementById('latestLatency'),
+  gatewayLatency: document.getElementById('gatewayLatency'),
+
+  p50Latency: document.getElementById('p50Latency'),
+  p95Latency: document.getElementById('p95Latency'),
+  p99Latency: document.getElementById('p99Latency'),
+  sampleCount: document.getElementById('sampleCount'),
+  backpressureEnabled: document.getElementById('backpressureEnabled'),
+  broadcastInterval: document.getElementById('broadcastInterval'),
+  totalClientConnections: document.getElementById('totalClientConnections'),
+  totalClientDisconnects: document.getElementById('totalClientDisconnects'),
+
+  latencySummaryBadge: document.getElementById('latencySummaryBadge'),
+  topMoviesCountBadge: document.getElementById('topMoviesCountBadge'),
+  recentActivityCountBadge: document.getElementById('recentActivityCountBadge'),
+
+  topMoviesContainer: document.getElementById('topMoviesContainer'),
+  lastProcessedContainer: document.getElementById('lastProcessedContainer'),
+  recentActivityContainer: document.getElementById('recentActivityContainer'),
+
+  latencyChart: document.getElementById('latencyChart')
+};
+
+function getQueryParam(name) {
+  return new URLSearchParams(window.location.search).get(name);
 }
 
-function formatShortId(value) {
+function normalizeWebSocketUrl(value) {
   if (!value) {
-    return "-";
+    return '';
   }
 
-  return String(value).slice(0, 8);
+  const trimmed = String(value).trim();
+
+  if (trimmed.startsWith('https://')) {
+    return `wss://${trimmed.slice('https://'.length)}`;
+  }
+
+  if (trimmed.startsWith('http://')) {
+    return `ws://${trimmed.slice('http://'.length)}`;
+  }
+
+  return trimmed;
+}
+
+function getWebSocketUrl() {
+  const fromQuery = getQueryParam('ws');
+  if (fromQuery) {
+    return normalizeWebSocketUrl(fromQuery);
+  }
+
+  const fromConfig = window.DASHBOARD_CONFIG?.wsUrl;
+  if (fromConfig) {
+    return normalizeWebSocketUrl(fromConfig);
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}`;
+}
+
+function httpBaseFromWs(wsUrl) {
+  try {
+    const url = new URL(wsUrl);
+    url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+    url.pathname = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '—';
+  }
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+function formatMs(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '—';
+  }
+  return `${Math.round(value)} ms`;
 }
 
 function formatDate(value) {
   if (!value) {
-    return "-";
+    return '—';
   }
-
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-
   return date.toLocaleString();
 }
 
-function pushLatencyHistory(metrics) {
-  if (!metrics) {
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function setConnectionStatus(status, label) {
+  els.connectionStatus.classList.remove('connected', 'disconnected');
+  if (status === 'connected') {
+    els.connectionStatus.classList.add('connected');
+  } else if (status === 'disconnected') {
+    els.connectionStatus.classList.add('disconnected');
+  }
+  els.connectionStatusText.textContent = label;
+}
+
+function updateLastUiUpdate() {
+  els.lastUiUpdate.textContent = new Date().toLocaleTimeString();
+}
+
+function mergeMetrics(incoming) {
+  if (!incoming || typeof incoming !== 'object') {
+    return;
+  }
+  state.metrics = {
+    ...state.metrics,
+    ...incoming
+  };
+}
+
+function mergeSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') {
     return;
   }
 
-  latencyHistory.push({
-    latest: metrics.latestLatencyMs,
-    p50: metrics.p50LatencyMs,
-    p95: metrics.p95LatencyMs,
-    p99: metrics.p99LatencyMs
-  });
+  if (snapshot.metrics) {
+    mergeMetrics(snapshot.metrics);
+  }
 
-  while (latencyHistory.length > MAX_LATENCY_HISTORY) {
-    latencyHistory.shift();
+  if (Array.isArray(snapshot.topMovies)) {
+    state.topMovies = snapshot.topMovies;
+  }
+
+  if (Array.isArray(snapshot.recentActivity)) {
+    state.recentActivity = snapshot.recentActivity.slice(0, MAX_RECENT_ITEMS);
+    rebuildLatencySeriesFromRecentActivity();
+  }
+
+  if (snapshot.lastProcessedUpdate) {
+    state.lastProcessedUpdate = snapshot.lastProcessedUpdate;
+    maybePushLatencyPoint(snapshot.lastProcessedUpdate.endToEndLatencyMs);
   }
 }
 
-function drawLine(points, key, color, width, height, padding, maxValue) {
-  if (!latencyChartCtx || points.length < 2) {
+function rebuildLatencySeriesFromRecentActivity() {
+  const series = state.recentActivity
+    .map(item => item?.endToEndLatencyMs)
+    .filter(value => typeof value === 'number' && !Number.isNaN(value))
+    .slice(0, MAX_CHART_POINTS)
+    .reverse();
+
+  state.latencySeries = series;
+}
+
+function maybePushLatencyPoint(value) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
     return;
   }
 
-  latencyChartCtx.beginPath();
-  latencyChartCtx.strokeStyle = color;
-  latencyChartCtx.lineWidth = 2;
-
-  points.forEach((point, index) => {
-    const rawValue = point[key];
-
-    if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
-      return;
-    }
-
-    const x = padding + (index / Math.max(points.length - 1, 1)) * (width - padding * 2);
-    const y = height - padding - (rawValue / maxValue) * (height - padding * 2);
-
-    if (index === 0) {
-      latencyChartCtx.moveTo(x, y);
-    } else {
-      latencyChartCtx.lineTo(x, y);
-    }
-  });
-
-  latencyChartCtx.stroke();
-}
-
-function renderLatencyChart() {
-  if (!latencyChartCtx || !latencyChartEl) {
-    return;
-  }
-
-  const width = latencyChartEl.width;
-  const height = latencyChartEl.height;
-  const padding = 34;
-
-  latencyChartCtx.clearRect(0, 0, width, height);
-  latencyChartCtx.fillStyle = "#ffffff";
-  latencyChartCtx.fillRect(0, 0, width, height);
-
-  const values = latencyHistory.flatMap((entry) =>
-    [entry.latest, entry.p50, entry.p95, entry.p99].filter(
-      (value) => typeof value === "number" && Number.isFinite(value)
-    )
-  );
-
-  if (!values.length) {
-    latencyChartCtx.fillStyle = "#6b7280";
-    latencyChartCtx.font = "16px Arial";
-    latencyChartCtx.fillText("Waiting for latency samples...", padding, height / 2);
-    return;
-  }
-
-  const maxValue = Math.max(...values, 1);
-  const roundedMax = Math.ceil(maxValue / 1000) * 1000 || maxValue;
-
-  latencyChartCtx.strokeStyle = "#e5e7eb";
-  latencyChartCtx.lineWidth = 1;
-  latencyChartCtx.beginPath();
-  latencyChartCtx.moveTo(padding, padding);
-  latencyChartCtx.lineTo(padding, height - padding);
-  latencyChartCtx.lineTo(width - padding, height - padding);
-  latencyChartCtx.stroke();
-
-  latencyChartCtx.fillStyle = "#6b7280";
-  latencyChartCtx.font = "12px Arial";
-  latencyChartCtx.fillText(`${roundedMax} ms`, 6, padding + 4);
-  latencyChartCtx.fillText("0 ms", 10, height - padding + 4);
-
-  drawLine(latencyHistory, "latest", "#2563eb", width, height, padding, roundedMax);
-  drawLine(latencyHistory, "p50", "#16a34a", width, height, padding, roundedMax);
-  drawLine(latencyHistory, "p95", "#f59e0b", width, height, padding, roundedMax);
-  drawLine(latencyHistory, "p99", "#dc2626", width, height, padding, roundedMax);
-}
-
-function setLoadingState() {
-  statusEl.textContent = "loading snapshot...";
-  clientsEl.textContent = "loading...";
-
-  totalUpdatesEl.textContent = "loading...";
-  latestLatencyEl.textContent = "loading...";
-  p50El.textContent = "loading...";
-  p95El.textContent = "loading...";
-  p99El.textContent = "loading...";
-  samplesEl.textContent = "loading...";
-
-  totalBroadcastsEl.textContent = "loading...";
-coalescedUpdatesEl.textContent = "loading...";
-broadcastIntervalEl.textContent = "loading...";
-clientConnectionsEl.textContent = "loading...";
-clientDisconnectsEl.textContent = "loading...";
-
-  topMoviesEl.innerHTML = "";
-  const topMoviesLoading = document.createElement("li");
-  topMoviesLoading.textContent = "Loading top viewed movies...";
-  topMoviesEl.appendChild(topMoviesLoading);
-
-  activityEl.innerHTML = "";
-  const activityLoading = document.createElement("li");
-  activityLoading.textContent = "Loading recent activity...";
-  activityEl.appendChild(activityLoading);
-
-  latencyMetricsEl.innerHTML = "";
-  const lastUpdateLoading = document.createElement("li");
-  lastUpdateLoading.textContent = "Loading last processed update...";
-  latencyMetricsEl.appendChild(lastUpdateLoading);
-}
-
-function renderMetrics(metrics) {
-  if (!metrics) {
-  totalUpdatesEl.textContent = "-";
-  latestLatencyEl.textContent = "-";
-  p50El.textContent = "-";
-  p95El.textContent = "-";
-  p99El.textContent = "-";
-  samplesEl.textContent = "-";
-  totalBroadcastsEl.textContent = "-";
-  coalescedUpdatesEl.textContent = "-";
-  broadcastIntervalEl.textContent = "-";
-  clientConnectionsEl.textContent = "-";
-clientDisconnectsEl.textContent = "-";
-  return;
-}
-
-  totalUpdatesEl.textContent = formatMetric(metrics.totalUpdates);
-  latestLatencyEl.textContent = formatMetric(metrics.latestLatencyMs);
-  p50El.textContent = formatMetric(metrics.p50LatencyMs);
-  p95El.textContent = formatMetric(metrics.p95LatencyMs);
-  p99El.textContent = formatMetric(metrics.p99LatencyMs);
-  samplesEl.textContent = formatMetric(metrics.sampleCount);
-  totalBroadcastsEl.textContent = formatMetric(metrics.totalBroadcasts);
-coalescedUpdatesEl.textContent = formatMetric(metrics.coalescedUpdates);
-broadcastIntervalEl.textContent = formatMetric(metrics.broadcastIntervalMs);
-clientConnectionsEl.textContent = formatMetric(metrics.totalClientConnections);
-clientDisconnectsEl.textContent = formatMetric(metrics.totalClientDisconnects);
-  pushLatencyHistory(metrics);
-renderLatencyChart();
-}
-
-function renderTopMovies(items) {
-  topMoviesEl.innerHTML = "";
-
-  if (!items || !items.length) {
-    const li = document.createElement("li");
-    li.textContent = "No top movies available yet.";
-    topMoviesEl.appendChild(li);
-    return;
-  }
-
-  items.forEach((item, index) => {
-    const li = document.createElement("li");
-    const title = item.movieTitle || item.movieId || "Unknown movie";
-    const count = item.viewCount ?? "?";
-    const lastViewed = formatDate(item.lastViewed || item.updatedAt);
-
-    li.textContent = `#${index + 1} ${title} | views=${count} | lastViewed=${lastViewed}`;
-    topMoviesEl.appendChild(li);
-  });
-}
-
-function renderActivity(items) {
-  activityEl.innerHTML = "";
-
-  if (!items || !items.length) {
-    const li = document.createElement("li");
-    li.textContent = "No activity yet.";
-    activityEl.appendChild(li);
-    return;
-  }
-
-  items.forEach((item) => {
-    const li = document.createElement("li");
-    const title = item.movieTitle || item.movieId || "Unknown movie";
-    const count = item.viewCount ?? "?";
-    const when = formatDate(item.processedAt || item.lastViewed);
-    const latency = item.endToEndLatencyMs ?? "-";
-    
-    const eventId = formatShortId(item.eventId || item.messageId);
-    li.textContent = `${title} | views=${count} | event=${eventId} | processedAt=${when} | e2eLatencyMs=${latency}`;
-    activityEl.appendChild(li);
-  });
-}
-
-function renderLastUpdate(payload) {
-  latencyMetricsEl.innerHTML = "";
-
-  if (!payload) {
-    const li = document.createElement("li");
-    li.textContent = "No processed update yet.";
-    latencyMetricsEl.appendChild(li);
-    return;
-  }
-
-  const li = document.createElement("li");
-
-  li.textContent =
-  `${payload.movieTitle || payload.movieId} | ` +
-  `views=${payload.viewCount ?? "?"} | ` +
-  `event=${eventId} | ` +
-  `processedAt=${payload.processedAt || "-"} | ` +
-  `processingLatencyMs=${payload.processingLatencyMs ?? "-"} | ` +
-  `gatewayLatencyMs=${payload.gatewayLatencyMs ?? "-"} | ` +
-  `endToEndLatencyMs=${payload.endToEndLatencyMs ?? "-"}`;
-
-  latencyMetricsEl.appendChild(li);
-}
-
-function applyDashboardMessage(message) {
-  hasRenderedRealData = true;
-
-  if (typeof message.connectedClients === "number") {
-    clientsEl.textContent = message.connectedClients;
-  }
-
-  if (message.metrics) {
-    renderMetrics(message.metrics);
-  }
-
-  if (Array.isArray(message.topMovies)) {
-    renderTopMovies(message.topMovies);
-  }
-
-  if (Array.isArray(message.recentActivity)) {
-    renderActivity(message.recentActivity);
-  }
-
-  if (message.lastProcessedUpdate || message.payload) {
-    renderLastUpdate(message.lastProcessedUpdate || message.payload);
-  } else if (Array.isArray(message.recentActivity) && message.recentActivity.length > 0) {
-    renderLastUpdate(message.recentActivity[0]);
+  state.latencySeries.push(value);
+  if (state.latencySeries.length > MAX_CHART_POINTS) {
+    state.latencySeries.shift();
   }
 }
 
-async function loadInitialSnapshot() {
+async function fetchSnapshot(httpBase) {
+  if (!httpBase) return;
+
   try {
-    const response = await fetch(`${snapshotUrl}/snapshot`, {
-      method: "GET",
-      cache: "no-store"
+    const response = await fetch(`${httpBase}/snapshot`, {
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
     });
 
     if (!response.ok) {
-      console.warn(`Snapshot request failed with HTTP ${response.status}`);
-      return false;
+      throw new Error(`Snapshot request failed: ${response.status}`);
     }
 
-    const snapshot = await response.json();
-
-    applyDashboardMessage({
-      connectedClients: snapshot.connectedClients,
-      metrics: snapshot.metrics || null,
-      topMovies: snapshot.topMovies || [],
-      recentActivity: snapshot.recentActivity || [],
-      lastProcessedUpdate:
-        snapshot.lastProcessedUpdate ||
-        (snapshot.recentActivity && snapshot.recentActivity.length > 0 ? snapshot.recentActivity[0] : null)
-    });
-
-    return true;
+    const data = await response.json();
+    mergeSnapshot(data);
+    renderAll();
   } catch (error) {
-    console.error("Failed to load initial snapshot", error);
-    return false;
+    console.warn('Failed to fetch snapshot:', error);
   }
 }
 
-function connectWebSocket() {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
+function handleIncomingMessage(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return;
   }
 
-  statusEl.textContent = reconnectAttempt === 0 ? "connecting..." : `reconnecting... attempt ${reconnectAttempt}`;
+  if (payload.snapshot && typeof payload.snapshot === 'object') {
+    mergeSnapshot(payload.snapshot);
+    renderAll();
+    return;
+  }
 
-  const socket = new WebSocket(gatewayUrl);
+  if (payload.metrics || payload.topMovies || payload.recentActivity || payload.lastProcessedUpdate) {
+    mergeSnapshot(payload);
+    renderAll();
+    return;
+  }
 
-  socket.addEventListener("open", () => {
-    reconnectAttempt = 0;
-    statusEl.textContent = "connected";
+  if (payload.type === 'movie_viewed_processed') {
+    state.lastProcessedUpdate = payload;
+    state.recentActivity = [payload, ...state.recentActivity].slice(0, MAX_RECENT_ITEMS);
+    maybePushLatencyPoint(payload.endToEndLatencyMs);
+    renderAll();
+    return;
+  }
+}
+
+function renderSummaryCards() {
+  const m = state.metrics;
+
+  els.connectedClients.textContent = formatNumber(m.connectedClients);
+  els.totalUpdates.textContent = formatNumber(m.totalUpdates);
+  els.totalBroadcasts.textContent = formatNumber(m.totalBroadcasts);
+  els.coalescedUpdates.textContent = formatNumber(m.coalescedUpdates);
+  els.latestLatency.textContent = formatMs(m.latestLatencyMs);
+
+  const last = state.lastProcessedUpdate;
+  const consistencyWindow = last?.gatewayLatencyMs ?? m.latestLatencyMs ?? null;
+  els.gatewayLatency.textContent = formatMs(consistencyWindow);
+}
+
+function renderMetricsPanel() {
+  const m = state.metrics;
+
+  els.p50Latency.textContent = formatMs(m.p50LatencyMs);
+  els.p95Latency.textContent = formatMs(m.p95LatencyMs);
+  els.p99Latency.textContent = formatMs(m.p99LatencyMs);
+  els.sampleCount.textContent = formatNumber(m.sampleCount);
+  els.backpressureEnabled.textContent = m.backpressureEnabled ? 'Yes' : 'No';
+  els.broadcastInterval.textContent = m.broadcastIntervalMs ? `${m.broadcastIntervalMs} ms` : '—';
+  els.totalClientConnections.textContent = formatNumber(m.totalClientConnections);
+  els.totalClientDisconnects.textContent = formatNumber(m.totalClientDisconnects);
+
+  const summary = [];
+  if (m.p50LatencyMs != null) summary.push(`p50 ${Math.round(m.p50LatencyMs)} ms`);
+  if (m.p95LatencyMs != null) summary.push(`p95 ${Math.round(m.p95LatencyMs)} ms`);
+  if (m.p99LatencyMs != null) summary.push(`p99 ${Math.round(m.p99LatencyMs)} ms`);
+
+  els.latencySummaryBadge.textContent = summary.length > 0 ? summary.join(' • ') : 'No samples yet';
+}
+
+function renderTopMovies() {
+  const items = Array.isArray(state.topMovies) ? state.topMovies : [];
+  els.topMoviesCountBadge.textContent = `${items.length} movie${items.length === 1 ? '' : 's'}`;
+
+  if (items.length === 0) {
+    els.topMoviesContainer.innerHTML = `
+      <div class="empty-state">
+        No ranked movies available yet. Trigger some movie access events to populate this table.
+      </div>
+    `;
+    return;
+  }
+
+  const rows = items.map((movie, index) => `
+    <tr>
+      <td><span class="rank-pill">#${index + 1}</span></td>
+      <td>
+        <div class="movie-title">${escapeHtml(movie.movieTitle || 'Unknown movie')}</div>
+        <div class="muted">${escapeHtml(movie.movieId || '—')}</div>
+      </td>
+      <td>${formatNumber(movie.viewCount)}</td>
+      <td>${formatDate(movie.lastViewed)}</td>
+      <td>${formatDate(movie.updatedAt)}</td>
+    </tr>
+  `).join('');
+
+  els.topMoviesContainer.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Movie</th>
+          <th>Views</th>
+          <th>Last Viewed</th>
+          <th>Updated At</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderLastProcessed() {
+  const item = state.lastProcessedUpdate;
+
+  if (!item) {
+    els.lastProcessedContainer.innerHTML = `
+      <div class="empty-state">
+        No processed update has been received yet.
+      </div>
+    `;
+    return;
+  }
+
+  els.lastProcessedContainer.innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-item">
+        <span>Event type</span>
+        <strong>${escapeHtml(item.type || '—')}</strong>
+      </div>
+      <div class="detail-item">
+        <span>Movie title</span>
+        <strong>${escapeHtml(item.movieTitle || 'Unknown movie')}</strong>
+      </div>
+      <div class="detail-item">
+        <span>Movie ID</span>
+        <strong>${escapeHtml(item.movieId || '—')}</strong>
+      </div>
+      <div class="detail-item">
+        <span>View count</span>
+        <strong>${formatNumber(item.viewCount)}</strong>
+      </div>
+      <div class="detail-item">
+        <span>Accessed at</span>
+        <strong>${formatDate(item.accessedAt)}</strong>
+      </div>
+      <div class="detail-item">
+        <span>Processed at</span>
+        <strong>${formatDate(item.processedAt)}</strong>
+      </div>
+      <div class="detail-item">
+        <span>Gateway received at</span>
+        <strong>${formatDate(item.gatewayReceivedAt)}</strong>
+      </div>
+      <div class="detail-item">
+        <span>Last viewed</span>
+        <strong>${formatDate(item.lastViewed)}</strong>
+      </div>
+      <div class="detail-item">
+        <span>Processing latency</span>
+        <strong>${formatMs(item.processingLatencyMs)}</strong>
+      </div>
+      <div class="detail-item">
+        <span>Gateway latency</span>
+        <strong>${formatMs(item.gatewayLatencyMs)}</strong>
+      </div>
+      <div class="detail-item">
+        <span>End-to-end latency</span>
+        <strong>${formatMs(item.endToEndLatencyMs)}</strong>
+      </div>
+      <div class="detail-item">
+        <span>Event ID / correlation hint</span>
+        <strong>${escapeHtml(item.eventId || item.messageId || 'Not exposed in payload')}</strong>
+      </div>
+    </div>
+  `;
+}
+
+function renderRecentActivity() {
+  const items = Array.isArray(state.recentActivity) ? state.recentActivity : [];
+  els.recentActivityCountBadge.textContent = `${items.length} item${items.length === 1 ? '' : 's'}`;
+
+  if (items.length === 0) {
+    els.recentActivityContainer.innerHTML = `
+      <div class="empty-state">
+        No recent activity yet. Access a movie resource to see live event propagation.
+      </div>
+    `;
+    return;
+  }
+
+  els.recentActivityContainer.innerHTML = items.map(item => `
+    <div class="recent-item">
+      <div class="recent-top">
+        <div class="recent-title">${escapeHtml(item.movieTitle || 'Unknown movie')}</div>
+        <div class="recent-view-count">Views: ${formatNumber(item.viewCount)}</div>
+      </div>
+
+      <div class="recent-grid">
+        <div>
+          Type
+          <strong>${escapeHtml(item.type || '—')}</strong>
+        </div>
+        <div>
+          Movie ID
+          <strong>${escapeHtml(item.movieId || '—')}</strong>
+        </div>
+        <div>
+          Accessed at
+          <strong>${formatDate(item.accessedAt)}</strong>
+        </div>
+        <div>
+          Last viewed
+          <strong>${formatDate(item.lastViewed)}</strong>
+        </div>
+        <div>
+          Processing latency
+          <strong>${formatMs(item.processingLatencyMs)}</strong>
+        </div>
+        <div>
+          Gateway latency
+          <strong>${formatMs(item.gatewayLatencyMs)}</strong>
+        </div>
+        <div>
+          End-to-end latency
+          <strong>${formatMs(item.endToEndLatencyMs)}</strong>
+        </div>
+        <div>
+          Processed at
+          <strong>${formatDate(item.processedAt)}</strong>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderLatencyChart() {
+  const canvas = els.latencyChart;
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+
+  ctx.clearRect(0, 0, width, height);
+
+  const points = state.latencySeries.slice(-MAX_CHART_POINTS);
+
+  // background
+  const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+  bgGradient.addColorStop(0, 'rgba(181, 167, 255, 0.12)');
+  bgGradient.addColorStop(1, 'rgba(142, 228, 182, 0.03)');
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, width, height);
+
+  const padding = { top: 24, right: 24, bottom: 34, left: 48 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+
+  // grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(width - padding.right, y);
+    ctx.stroke();
+  }
+
+  if (points.length === 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.font = '14px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('No latency samples yet', width / 2, height / 2);
+    return;
+  }
+
+  const maxValue = Math.max(...points, 100);
+  const minValue = 0;
+
+  // y axis labels
+  ctx.fillStyle = 'rgba(255,255,255,0.65)';
+  ctx.font = '12px Inter, sans-serif';
+  ctx.textAlign = 'right';
+
+  for (let i = 0; i <= 4; i++) {
+    const value = Math.round(maxValue - ((maxValue - minValue) / 4) * i);
+    const y = padding.top + (chartH / 4) * i;
+    ctx.fillText(`${value} ms`, padding.left - 8, y + 4);
+  }
+
+  const getX = (index) =>
+    padding.left + (index / Math.max(points.length - 1, 1)) * chartW;
+
+  const getY = (value) =>
+    padding.top + chartH - ((value - minValue) / Math.max(maxValue - minValue, 1)) * chartH;
+
+  // area
+  const areaGradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
+  areaGradient.addColorStop(0, 'rgba(94, 212, 156, 0.28)');
+  areaGradient.addColorStop(1, 'rgba(145, 124, 255, 0.02)');
+
+  ctx.beginPath();
+  ctx.moveTo(getX(0), getY(points[0]));
+  points.forEach((value, index) => {
+    ctx.lineTo(getX(index), getY(value));
+  });
+  ctx.lineTo(getX(points.length - 1), padding.top + chartH);
+  ctx.lineTo(getX(0), padding.top + chartH);
+  ctx.closePath();
+  ctx.fillStyle = areaGradient;
+  ctx.fill();
+
+  // line
+  ctx.beginPath();
+  points.forEach((value, index) => {
+    const x = getX(index);
+    const y = getY(value);
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
   });
 
-  socket.addEventListener("close", () => {
-    statusEl.textContent = "disconnected - reconnecting soon";
+  const strokeGradient = ctx.createLinearGradient(padding.left, 0, width - padding.right, 0);
+  strokeGradient.addColorStop(0, '#b5a7ff');
+  strokeGradient.addColorStop(1, '#8ee4b6');
+  ctx.strokeStyle = strokeGradient;
+  ctx.lineWidth = 3;
+  ctx.stroke();
 
-    reconnectAttempt += 1;
-    const delayMs = Math.min(1000 * reconnectAttempt, 5000);
+  // points
+  points.forEach((value, index) => {
+    const x = getX(index);
+    const y = getY(value);
 
-    reconnectTimer = setTimeout(() => {
-      connectWebSocket();
-    }, delayMs);
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#8ee4b6';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+  });
+}
+
+function renderAll() {
+  renderSummaryCards();
+  renderMetricsPanel();
+  renderTopMovies();
+  renderLastProcessed();
+  renderRecentActivity();
+  renderLatencyChart();
+  updateLastUiUpdate();
+}
+
+function scheduleReconnect(wsUrl, httpBase) {
+  clearTimeout(reconnectTimer);
+  reconnectAttempts += 1;
+  els.reconnectAttempts.textContent = String(reconnectAttempts);
+  setConnectionStatus('disconnected', `Disconnected • reconnecting in 3s`);
+
+  reconnectTimer = setTimeout(() => {
+    connectWebSocket(wsUrl, httpBase);
+  }, 3000);
+}
+
+function connectWebSocket(wsUrl, httpBase) {
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch (error) {
+    console.error('WebSocket init failed:', error);
+    scheduleReconnect(wsUrl, httpBase);
+    return;
+  }
+
+  ws.addEventListener('open', async () => {
+    reconnectAttempts = 0;
+    els.reconnectAttempts.textContent = '0';
+    setConnectionStatus('connected', 'Connected');
+    await fetchSnapshot(httpBase);
   });
 
-  socket.addEventListener("error", () => {
-    statusEl.textContent = "connection error";
-  });
-
-  socket.addEventListener("message", (event) => {
+  ws.addEventListener('message', (event) => {
     try {
-      const message = JSON.parse(event.data);
-      applyDashboardMessage(message);
+      const payload = JSON.parse(event.data);
+      handleIncomingMessage(payload);
     } catch (error) {
-      console.error("Invalid WebSocket message", error);
+      console.warn('Failed to parse WebSocket message:', error, event.data);
+    }
+  });
+
+  ws.addEventListener('close', () => {
+    setConnectionStatus('disconnected', 'Connection lost');
+    scheduleReconnect(wsUrl, httpBase);
+  });
+
+  ws.addEventListener('error', () => {
+    if (ws) {
+      ws.close();
     }
   });
 }
 
-async function startDashboard() {
-  setLoadingState();
-  renderLatencyChart();
+function init() {
+  const wsUrl = getWebSocketUrl();
+  const httpBase = httpBaseFromWs(wsUrl);
 
-  const snapshotLoaded = await loadInitialSnapshot();
+  els.wsEndpoint.textContent = wsUrl || '—';
+  els.httpEndpoint.textContent = httpBase || '—';
 
-  if (!snapshotLoaded && !hasRenderedRealData) {
-    clientsEl.textContent = "-";
-    renderMetrics(null);
-    renderTopMovies([]);
-    renderActivity([]);
-    renderLastUpdate(null);
-  }
-
-  connectWebSocket();
+  renderAll();
+  connectWebSocket(wsUrl, httpBase);
 }
 
-startDashboard();
+init();
