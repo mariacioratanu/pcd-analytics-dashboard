@@ -196,8 +196,8 @@ function mergeSnapshot(snapshot) {
 
 function rebuildLatencySeriesFromRecentActivity() {
   const series = state.recentActivity
-    .map(item => item?.endToEndLatencyMs)
-    .filter(value => typeof value === 'number' && !Number.isNaN(value))
+    .map((item) => item?.endToEndLatencyMs)
+    .filter((value) => typeof value === 'number' && !Number.isNaN(value))
     .slice(0, MAX_CHART_POINTS)
     .reverse();
 
@@ -248,7 +248,12 @@ function handleIncomingMessage(payload) {
     return;
   }
 
-  if (payload.metrics || payload.topMovies || payload.recentActivity || payload.lastProcessedUpdate) {
+  if (
+    payload.metrics ||
+    payload.topMovies ||
+    payload.recentActivity ||
+    payload.lastProcessedUpdate
+  ) {
     mergeSnapshot(payload);
     renderAll();
     return;
@@ -310,7 +315,9 @@ function renderTopMovies() {
     return;
   }
 
-  const rows = items.map((movie, index) => `
+  const rows = items
+    .map(
+      (movie, index) => `
     <tr>
       <td><span class="rank-pill">#${index + 1}</span></td>
       <td>
@@ -321,7 +328,9 @@ function renderTopMovies() {
       <td>${formatDate(movie.lastViewed)}</td>
       <td>${formatDate(movie.updatedAt)}</td>
     </tr>
-  `).join('');
+  `
+    )
+    .join('');
 
   els.topMoviesContainer.innerHTML = `
     <table>
@@ -418,7 +427,9 @@ function renderRecentActivity() {
     return;
   }
 
-  els.recentActivityContainer.innerHTML = items.map(item => `
+  els.recentActivityContainer.innerHTML = items
+    .map(
+      (item) => `
     <div class="recent-item">
       <div class="recent-top">
         <div class="recent-title">${escapeHtml(item.movieTitle || 'Unknown movie')}</div>
@@ -460,7 +471,9 @@ function renderRecentActivity() {
         </div>
       </div>
     </div>
-  `).join('');
+  `
+    )
+    .join('');
 }
 
 function renderLatencyChart() {
@@ -472,6 +485,36 @@ function renderLatencyChart() {
   ctx.clearRect(0, 0, width, height);
 
   const points = state.latencySeries.slice(-MAX_CHART_POINTS);
+  const metrics = state.metrics || {};
+
+  const percentileLines = [
+    {
+      label: 'p50',
+      value: metrics.p50LatencyMs,
+      stroke: '#8f5ae8',
+      background: 'rgba(143, 90, 232, 0.12)'
+    },
+    {
+      label: 'p95',
+      value: metrics.p95LatencyMs,
+      stroke: '#3ead72',
+      background: 'rgba(62, 173, 114, 0.12)'
+    },
+    {
+      label: 'p99',
+      value: metrics.p99LatencyMs,
+      stroke: '#dca84a',
+      background: 'rgba(220, 168, 74, 0.14)'
+    }
+  ].filter(
+    (item) => typeof item.value === 'number' && Number.isFinite(item.value) && item.value >= 0
+  );
+
+  const candidateValues = [...points, ...percentileLines.map((item) => item.value), 100];
+
+  const maxValueRaw = Math.max(...candidateValues);
+  const maxValue = Math.ceil(maxValueRaw / 100) * 100;
+  const minValue = 0;
 
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
   bgGradient.addColorStop(0, 'rgba(181, 167, 255, 0.12)');
@@ -479,9 +522,14 @@ function renderLatencyChart() {
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
 
-  const padding = { top: 24, right: 24, bottom: 34, left: 48 };
+  const padding = { top: 46, right: 86, bottom: 36, left: 54 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
+
+  const getX = (index) => padding.left + (index / Math.max(points.length - 1, 1)) * chartW;
+
+  const getY = (value) =>
+    padding.top + chartH - ((value - minValue) / Math.max(maxValue - minValue, 1)) * chartH;
 
   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
   ctx.lineWidth = 1;
@@ -494,6 +542,67 @@ function renderLatencyChart() {
     ctx.stroke();
   }
 
+  ctx.fillStyle = 'rgba(255,255,255,0.68)';
+  ctx.font = '12px Inter, sans-serif';
+  ctx.textAlign = 'right';
+
+  for (let i = 0; i <= 4; i++) {
+    const value = Math.round(maxValue - ((maxValue - minValue) / 4) * i);
+    const y = padding.top + (chartH / 4) * i;
+    ctx.fillText(`${value} ms`, padding.left - 9, y + 4);
+  }
+
+  ctx.textAlign = 'left';
+  ctx.font = '12px Inter, sans-serif';
+
+  let legendX = padding.left;
+  const legendY = 20;
+
+  const legendItems = [
+    { label: 'end-to-end latency', stroke: '#b5a7ff' },
+    ...percentileLines.map((item) => ({
+      label: `${item.label}: ${Math.round(item.value)} ms`,
+      stroke: item.stroke
+    }))
+  ];
+
+  for (const item of legendItems) {
+    ctx.fillStyle = item.stroke;
+    ctx.beginPath();
+    ctx.arc(legendX + 6, legendY - 4, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    ctx.fillText(item.label, legendX + 17, legendY);
+
+    legendX += ctx.measureText(item.label).width + 46;
+  }
+
+  for (const item of percentileLines) {
+    const y = getY(item.value);
+
+    ctx.save();
+    ctx.setLineDash([8, 6]);
+    ctx.strokeStyle = item.stroke;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(width - padding.right, y);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = item.background;
+    ctx.fillRect(width - padding.right + 8, y - 13, 58, 24);
+
+    ctx.strokeStyle = item.stroke;
+    ctx.strokeRect(width - padding.right + 8, y - 13, 58, 24);
+
+    ctx.fillStyle = item.stroke;
+    ctx.font = 'bold 12px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${item.label}`, width - padding.right + 37, y + 4);
+  }
+
   if (points.length === 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.65)';
     ctx.font = '14px Inter, sans-serif';
@@ -502,34 +611,17 @@ function renderLatencyChart() {
     return;
   }
 
-  const maxValue = Math.max(...points, 100);
-  const minValue = 0;
-
-  ctx.fillStyle = 'rgba(255,255,255,0.65)';
-  ctx.font = '12px Inter, sans-serif';
-  ctx.textAlign = 'right';
-
-  for (let i = 0; i <= 4; i++) {
-    const value = Math.round(maxValue - ((maxValue - minValue) / 4) * i);
-    const y = padding.top + (chartH / 4) * i;
-    ctx.fillText(`${value} ms`, padding.left - 8, y + 4);
-  }
-
-  const getX = (index) =>
-    padding.left + (index / Math.max(points.length - 1, 1)) * chartW;
-
-  const getY = (value) =>
-    padding.top + chartH - ((value - minValue) / Math.max(maxValue - minValue, 1)) * chartH;
-
   const areaGradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
   areaGradient.addColorStop(0, 'rgba(94, 212, 156, 0.28)');
   areaGradient.addColorStop(1, 'rgba(145, 124, 255, 0.02)');
 
   ctx.beginPath();
   ctx.moveTo(getX(0), getY(points[0]));
+
   points.forEach((value, index) => {
     ctx.lineTo(getX(index), getY(value));
   });
+
   ctx.lineTo(getX(points.length - 1), padding.top + chartH);
   ctx.lineTo(getX(0), padding.top + chartH);
   ctx.closePath();
@@ -537,16 +629,22 @@ function renderLatencyChart() {
   ctx.fill();
 
   ctx.beginPath();
+
   points.forEach((value, index) => {
     const x = getX(index);
     const y = getY(value);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
   });
 
   const strokeGradient = ctx.createLinearGradient(padding.left, 0, width - padding.right, 0);
   strokeGradient.addColorStop(0, '#b5a7ff');
   strokeGradient.addColorStop(1, '#8ee4b6');
+
   ctx.strokeStyle = strokeGradient;
   ctx.lineWidth = 3;
   ctx.stroke();
@@ -565,6 +663,23 @@ function renderLatencyChart() {
     ctx.fillStyle = '#ffffff';
     ctx.fill();
   });
+
+  const latestValue = points[points.length - 1];
+  const latestX = getX(points.length - 1);
+  const latestY = getY(latestValue);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+  ctx.strokeStyle = 'rgba(143, 90, 232, 0.22)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(latestX - 58, latestY - 38, 116, 27, 10);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#261f38';
+  ctx.font = 'bold 12px Inter, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`latest ${Math.round(latestValue)} ms`, latestX, latestY - 20);
 }
 
 function renderAll() {

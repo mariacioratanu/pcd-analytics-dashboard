@@ -32,7 +32,10 @@ const routes: RouteOptions[] = [
 
       if (request.method === HttpMethods.GET) {
         void publishMovieViewedEvent(params.movie_id, movie.title).catch((error: unknown) => {
-          this.log.error({ error, movieId: params.movie_id }, 'Failed to publish movie viewed event');
+          this.log.error(
+            { error, movieId: params.movie_id },
+            'Failed to publish movie viewed event'
+          );
         });
       }
 
