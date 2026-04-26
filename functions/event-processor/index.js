@@ -1,10 +1,8 @@
 const crypto = require("crypto");
 const { Firestore, FieldValue } = require("@google-cloud/firestore");
 const { PubSub } = require("@google-cloud/pubsub");
-
 const firestore = new Firestore();
 const pubsub = new PubSub();
-
 const ANALYTICS_COLLECTION = process.env.ANALYTICS_COLLECTION || "movie-stats";
 const PROCESSED_COLLECTION = process.env.PROCESSED_COLLECTION || "processed-events";
 const DASHBOARD_UPDATES_TOPIC = process.env.DASHBOARD_UPDATES_TOPIC || "dashboard-updates";
@@ -95,10 +93,10 @@ exports.processResourceEvent = async (cloudEvent) => {
     throw new Error("No Pub/Sub payload received");
   }
 
-const payload = decodePayload(base64Data);
-const eventId = payload.eventId || rawMessageId || buildFallbackMessageId(base64Data);
-const messageId = rawMessageId || eventId;
-const movieId = payload.movieId || "unknown-movie";
+  const payload = decodePayload(base64Data);
+  const eventId = payload.eventId || rawMessageId || buildFallbackMessageId(base64Data);
+  const messageId = rawMessageId || eventId;
+  const movieId = payload.movieId || "unknown-movie";
   const movieTitle = payload.movieTitle || "Unknown";
   const accessedAt = payload.accessedAt || payload.viewedAt || new Date().toISOString();
   const processedAt = new Date().toISOString();

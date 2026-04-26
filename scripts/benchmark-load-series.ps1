@@ -33,9 +33,7 @@ Write-Host "WaitSeconds per run: $WaitSeconds"
 
 foreach ($RequestCount in $ParsedRequestCounts) {
   Write-Host ""
-  Write-Host "========================================"
   Write-Host "Running load level: $RequestCount requests"
-  Write-Host "========================================"
 
   powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-burst.ps1 -Region $Region -MovieId $MovieId -Requests $RequestCount -WaitSeconds $WaitSeconds
 
@@ -44,7 +42,7 @@ foreach ($RequestCount in $ParsedRequestCounts) {
     Select-Object -First 1
 
   if ($null -eq $LatestSummary) {
-    throw "No burst summary CSV was generated."
+    throw "No burst summary CSV was generated"
   }
 
   $Row = Import-Csv $LatestSummary.FullName | Select-Object -First 1
@@ -97,7 +95,7 @@ $CombinedResults | Export-Csv -NoTypeInformation -Encoding UTF8 $CombinedCsvPath
 $CombinedResults | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 $CombinedJsonPath
 
 Write-Host ""
-Write-Host "Variable-load benchmark completed."
+Write-Host "Variable-load benchmark completed"
 Write-Host "Combined CSV: $CombinedCsvPath"
 Write-Host "Combined JSON: $CombinedJsonPath"
 Write-Host ""

@@ -106,7 +106,7 @@ finally {
 }
 
 Write-Host ""
-Write-Host "gRPC analytics verification completed successfully." -ForegroundColor Green
+Write-Host "gRPC analytics verification completed successfully" -ForegroundColor Green
 Write-Host ""
 Write-Host "Verified internal communication:"
 Write-Host "websocket-gateway -> gRPC -> grpc-analytics-service -> Firestore"

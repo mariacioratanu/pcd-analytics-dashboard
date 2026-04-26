@@ -2,15 +2,11 @@ const path = require('path');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const { Firestore } = require('@google-cloud/firestore');
-
 const PORT = process.env.PORT || 8080;
 const ANALYTICS_COLLECTION = process.env.ANALYTICS_COLLECTION || 'movie-stats';
 const DEFAULT_TOP_MOVIES_LIMIT = Number.parseInt(process.env.TOP_MOVIES_LIMIT || '10', 10);
-
 const firestore = new Firestore();
-
 const protoPath = path.join(__dirname, 'proto', 'analytics.proto');
-
 const packageDefinition = protoLoader.loadSync(protoPath, {
   keepCase: false,
   longs: String,
@@ -18,7 +14,6 @@ const packageDefinition = protoLoader.loadSync(protoPath, {
   defaults: true,
   oneofs: true
 });
-
 const analyticsProto = grpc.loadPackageDefinition(packageDefinition).analytics;
 
 function nowIso() {

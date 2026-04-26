@@ -120,7 +120,7 @@ Assert-True ($TopMoviesResponse.count -ge 1) "Top movies endpoint returned at le
 Assert-True ($TopMoviesResponse.topMovies[0].viewCount -ge 1) "Top movie has a positive view count"
 
 Write-Host ""
-Write-Host "Smoke test completed successfully." -ForegroundColor Green
+Write-Host "Smoke test completed successfully" -ForegroundColor Green
 Write-Host ""
 Write-Host "Summary:"
 Write-Host "Project: $ProjectId"

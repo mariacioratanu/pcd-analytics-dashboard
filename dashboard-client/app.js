@@ -473,7 +473,6 @@ function renderLatencyChart() {
 
   const points = state.latencySeries.slice(-MAX_CHART_POINTS);
 
-  // background
   const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
   bgGradient.addColorStop(0, 'rgba(181, 167, 255, 0.12)');
   bgGradient.addColorStop(1, 'rgba(142, 228, 182, 0.03)');
@@ -484,7 +483,6 @@ function renderLatencyChart() {
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
-  // grid
   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
   ctx.lineWidth = 1;
 
@@ -507,7 +505,6 @@ function renderLatencyChart() {
   const maxValue = Math.max(...points, 100);
   const minValue = 0;
 
-  // y axis labels
   ctx.fillStyle = 'rgba(255,255,255,0.65)';
   ctx.font = '12px Inter, sans-serif';
   ctx.textAlign = 'right';
@@ -524,7 +521,6 @@ function renderLatencyChart() {
   const getY = (value) =>
     padding.top + chartH - ((value - minValue) / Math.max(maxValue - minValue, 1)) * chartH;
 
-  // area
   const areaGradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
   areaGradient.addColorStop(0, 'rgba(94, 212, 156, 0.28)');
   areaGradient.addColorStop(1, 'rgba(145, 124, 255, 0.02)');
@@ -540,7 +536,6 @@ function renderLatencyChart() {
   ctx.fillStyle = areaGradient;
   ctx.fill();
 
-  // line
   ctx.beginPath();
   points.forEach((value, index) => {
     const x = getX(index);
@@ -556,7 +551,6 @@ function renderLatencyChart() {
   ctx.lineWidth = 3;
   ctx.stroke();
 
-  // points
   points.forEach((value, index) => {
     const x = getX(index);
     const y = getY(value);

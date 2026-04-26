@@ -219,7 +219,7 @@ $UnauthorizedDebugStatus = curl.exe -s -o NUL -w "%{http_code}" -X POST -H "Cont
 Assert-True ($UnauthorizedDebugStatus -eq "403") "Gateway debug reset is protected without token"
 
 Write-Host ""
-Write-Host "Final cloud deployment verification completed successfully." -ForegroundColor Green
+Write-Host "Final cloud deployment verification completed successfully" -ForegroundColor Green
 Write-Host ""
 Write-Host "Verified components:"
 Write-Host "- fast-lazy-bee             $FastUrl"

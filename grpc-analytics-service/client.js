@@ -1,11 +1,8 @@
 const path = require('path');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
-
 const inputTarget = process.argv[2] || process.env.GRPC_ANALYTICS_URL || 'localhost:8080';
-
 const protoPath = path.join(__dirname, 'proto', 'analytics.proto');
-
 const packageDefinition = protoLoader.loadSync(protoPath, {
   keepCase: false,
   longs: String,

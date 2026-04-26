@@ -1,11 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Realtime Analytics Dashboard</title>
 
   <style>
@@ -55,7 +53,8 @@
       box-sizing: border-box;
     }
 
-    html, body {
+    html,
+    body {
       margin: 0;
       padding: 0;
       min-height: 100%;
@@ -670,6 +669,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="page-shell">
     <section class="hero">
@@ -779,7 +779,8 @@
           <div>
             <h2 class="panel-title">Realtime Latency Overview</h2>
             <div class="panel-subtitle">
-              Live visualization of end-to-end latency samples received by the dashboard.
+              Live visualization of end-to-end latency samples received by the dashboard, with explicit p50, p95 and p99
+              percentile overlays.
             </div>
           </div>
           <div class="panel-badge" id="latencySummaryBadge">No samples yet</div>
@@ -890,6 +891,7 @@
   </div>
 
   <script src="./config.js"></script>
-<script src="./app.js"></script>
+  <script src="./app.js"></script>
 </body>
+
 </html>

@@ -1,12 +1,9 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-
 const PORT = process.env.PORT || 8080;
 const WS_URL = process.env.WS_URL || '';
-
 const PUBLIC_DIR = __dirname;
-
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
