@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package analytics;
+
+service AnalyticsService {
+  rpc Health (HealthRequest) returns (HealthResponse);
+  rpc GetTopMovies (TopMoviesRequest) returns (TopMoviesResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string service = 2;
+  string generatedAt = 3;
+}
+
+message TopMoviesRequest {
+  int32 limit = 1;
+}
+
+message MovieViewStat {
+  string movieId = 1;
+  string movieTitle = 2;
+  int32 viewCount = 3;
+  string lastViewed = 4;
+  string updatedAt = 5;
+}
+
+message TopMoviesResponse {
+  repeated MovieViewStat movies = 1;
+  int32 count = 2;
+  string generatedAt = 3;
+}

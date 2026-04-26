@@ -6,9 +6,10 @@ COPY package*.json ./
 RUN npm install --omit=dev
 
 COPY index.js ./
+COPY client.js ./
 COPY proto ./proto
 
-RUN test -f /app/proto/analytics.proto
+ENV PORT=8080
 
 EXPOSE 8080
 

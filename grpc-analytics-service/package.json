@@ -1,0 +1,14 @@
+{
+  "name": "grpc-analytics-service",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node index.js",
+    "client": "node client.js"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^8.5.0",
+    "@grpc/grpc-js": "^1.14.0",
+    "@grpc/proto-loader": "^0.8.0"
+  }
+}
