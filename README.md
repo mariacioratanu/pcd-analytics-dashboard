@@ -145,6 +145,7 @@ gcloud firestore databases create --location=$REGION
 gcloud pubsub topics create resource-events
 gcloud pubsub topics create dashboard-updates
 ```
+If Firestore or one of the Pub/Sub topics already exists, the corresponding create command can be skipped.
 
 ## 7. Deploy
 
@@ -230,7 +231,7 @@ gcloud pubsub subscriptions update dashboard-updates-sub `
   --ack-deadline=30
 ```
 
-The first command creates the push subscription. If the subscription was already created during a previous deployment, the second command refreshes its push endpoint.
+Use the first command when creating the subscription for the first time. If it already exists, use the second command to refresh the push endpoint.
 
 ### 7.5 Deploy Dashboard Client
 
@@ -284,7 +285,7 @@ $env:DEBUG_TOKEN="pcd-debug-demo-token"
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 `
   -Region $REGION `
   -MovieId $MOVIE_ID `
-  -WaitSeconds 30
+  -WaitSeconds 90
 ```
 
 This test checks that a movie access event passes through the distributed pipeline and becomes visible in the gateway/dashboard state.
@@ -370,14 +371,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1
   -OutputDir "benchmark-results"
 ```
 
-Benchmark outputs are saved in `benchmark-results/`.
+Benchmark outputs are generated locally in `benchmark-results/`. The final benchmark files used in the report are copied and committed in `docs/benchmark-results/`.
 
 ## 11. Final benchmark summary
 
 The final benchmark files used for the report are:
-- `benchmark-results/load-series-summary-20260426-214858.csv`
-- `benchmark-results/consistency-summary-20260426-214138.csv`
-- `benchmark-results/concurrency-summary-20260426-215325.csv`
+- `docs/benchmark-results/load-series-summary-20260426-214858.csv`
+- `docs/benchmark-results/consistency-summary-20260426-214138.csv`
+- `docs/benchmark-results/consistency-trials-20260426-214138.csv`
+- `docs/benchmark-results/concurrency-summary-20260426-215325.csv`
 
 | Benchmark | Result |
 |---|---|
