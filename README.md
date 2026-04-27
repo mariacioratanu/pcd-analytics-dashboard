@@ -377,9 +377,12 @@ Benchmark outputs are generated locally in `benchmark-results/`. The final bench
 
 The final benchmark files used for the report are:
 - `docs/benchmark-results/load-series-summary-20260426-214858.csv`
+- `docs/benchmark-results/load-series-summary-20260426-214858.json`
 - `docs/benchmark-results/consistency-summary-20260426-214138.csv`
 - `docs/benchmark-results/consistency-trials-20260426-214138.csv`
+- `docs/benchmark-results/consistency-20260426-214138.json`
 - `docs/benchmark-results/concurrency-summary-20260426-215325.csv`
+- `docs/benchmark-results/concurrency-summary-20260426-215325.json`
 
 | Benchmark | Result |
 |---|---|
