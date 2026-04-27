@@ -1,13 +1,12 @@
-# PCD Cloud Distributed Applications  
-## Real-Time Analytics Dashboard
+# PCD Cloud Distributed Applications
 
 **Course:** Concurrent and Distributed Programming  
-**Assignment:** Project 1 - Real-Time Analytics Dashboard  
+**Selected assignment:** Project 1 - Real-Time Analytics Dashboard
 
-**Team members:**
-- Ciorâțanu Maria - MISS11
-- Pâncă Aida-Gabriela - MISS11
-- Varzar Alina-Miruna - MISS11
+**👥 Team members:**
+- Ciorâțanu Maria (MISS11)
+- Pâncă Aida-Gabriela (MISS11)
+- Varzar Alina-Miruna (MISS11)
 
 ## 1. Project overview
 
