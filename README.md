@@ -386,8 +386,8 @@ The final benchmark files used for the report are:
 
 | Benchmark | Result |
 |---|---|
-| Variable-volume benchmark | 10, 20, 50 and 100 requests were processed with 0% errors and 100% completion. |
-| Consistency benchmark | 5 / 5 successful trials, average consistency window 1073.15 ms. |
-| Concurrency benchmark | 100 requests per run, concurrency 1 / 5 / 10 / 20, all with 0% errors and 100% processing completion. |
-| Best measured REST throughput | 83.08 requests/second at concurrency 20. |
-| Backpressure example | At concurrency 20, 100 processed updates resulted in 9 WebSocket broadcasts and 91 coalesced updates. |
+| Variable-volume benchmark | 10, 20, 50 and 100 requests were processed with 0% errors and 100% completion |
+| Consistency benchmark | 5 / 5 successful trials, average consistency window 1073.15 ms |
+| Concurrency benchmark | 100 requests per run, concurrency 1 / 5 / 10 / 20, all with 0% errors and 100% processing completion |
+| Best measured REST throughput | 83.08 requests/second at concurrency 20 |
+| Backpressure example | At concurrency 20, 100 processed updates resulted in 9 WebSocket broadcasts and 91 coalesced updates |
