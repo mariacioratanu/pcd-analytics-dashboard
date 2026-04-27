@@ -9,8 +9,6 @@
 - Pâncă Aida-Gabriela - MISS11
 - Varzar Alina-Miruna - MISS11
 
----
-
 ## 1. Project overview
 
 This project extends the **Fast Lazy Bee** REST API into a distributed cloud application for real-time analytics.
@@ -24,8 +22,6 @@ GET /api/v1/movies/:movie_id
 the API publishes a `movie_viewed` event to Google Pub/Sub. The event is processed asynchronously by a Cloud Function, stored as aggregated analytics data in Firestore, and then sent to a live dashboard through a WebSocket Gateway.
 
 The dashboard displays live statistics such as top viewed movies, recent activity, connected clients, latency values, p50/p95/p99 latency and WebSocket backpressure metrics.
-
----
 
 ## 2. Architecture
 
@@ -61,77 +57,36 @@ flowchart LR
     Browser -->|opens dashboard| Dashboard
 ```
 
-Main flow:
+The architecture separates the synchronous movie API from the asynchronous analytics pipeline, so the REST response is returned immediately while dashboard statistics are updated shortly afterward.
 
-```text
-Fast Lazy Bee
--> Pub/Sub resource-events
--> Cloud Function event-processor
--> Firestore
--> Pub/Sub dashboard-updates
--> WebSocket Gateway
--> Dashboard Client
-```
-
----
-
-## 3. Main components
-
-| Component | Location | Deployment |
-|---|---|---|
-| Fast Lazy Bee API | `src/` | Cloud Run |
-| Cloud Function event processor | `functions/event-processor/` | Cloud Functions Gen2 |
-| WebSocket Gateway | `websocket-gateway/` | Cloud Run |
-| Dashboard Client | `dashboard-client/` | Cloud Run |
-| gRPC Analytics Service | `grpc-analytics-service/` | Cloud Run |
-
-Main project scripts are located in:
-
-```text
-scripts/
-```
-
----
-
-## 4. Prerequisites
+## 3. Prerequisites
 
 The project was developed and tested using Windows PowerShell.
 
 Required tools:
-
-```text
-Git
-Node.js
-npm
-Google Cloud SDK
-Docker Desktop
-curl.exe
-jq
-hey
-```
+- Git
+- Node.js
+- npm
+- Google Cloud SDK
+- Docker Desktop
+- `curl.exe`
+- `jq`
+- `hey`
 
 Required cloud setup:
-
-```text
-Google Cloud project with billing enabled
-MongoDB Atlas cluster with sample_mflix imported
-```
+- Google Cloud project with billing enabled
+- MongoDB Atlas cluster with `sample_mflix` imported
 
 Required Google Cloud APIs:
+- Cloud Run
+- Cloud Functions Gen2
+- Cloud Build
+- Pub/Sub
+- Firestore
+- Artifact Registry
+- Eventarc
 
-```text
-Cloud Run
-Cloud Functions Gen2
-Cloud Build
-Pub/Sub
-Firestore
-Artifact Registry
-Eventarc
-```
-
----
-
-## 5. Environment variables
+## 4. Environment variables
 
 ### Fast Lazy Bee API
 
@@ -179,9 +134,7 @@ TOP_MOVIES_LIMIT=10
 WS_URL=<websocket-gateway-wss-url>
 ```
 
----
-
-## 6. Local build
+## 5. Local build
 
 From the repository root:
 
@@ -202,15 +155,7 @@ node --check grpc-analytics-service\index.js
 node --check grpc-analytics-service\client.js
 ```
 
-Expected result:
-
-```text
-No build errors and no syntax errors.
-```
-
----
-
-## 7. Google Cloud setup
+## 6. Google Cloud setup
 
 Set common variables:
 
@@ -239,41 +184,27 @@ gcloud services enable `
   eventarc.googleapis.com
 ```
 
-Set the default region:
+Create the required cloud resources:
 
 ```powershell
 gcloud config set run/region $REGION
-```
 
-Create the Artifact Registry repository:
-
-```powershell
 gcloud artifacts repositories create myrepo `
   --repository-format=docker `
   --location=$REGION `
   --description="Docker repository"
-```
 
-Create Firestore:
-
-```powershell
 gcloud firestore databases create --location=$REGION
-```
 
-Create Pub/Sub topics:
-
-```powershell
 gcloud pubsub topics create resource-events
 gcloud pubsub topics create dashboard-updates
 ```
 
 If a resource already exists, the corresponding creation command can be skipped.
 
----
+## 7. Deploy
 
-## 8. Deploy
-
-### 8.1 Deploy Fast Lazy Bee API
+### 7.1 Deploy Fast Lazy Bee API
 
 Set the MongoDB Atlas connection string:
 
@@ -297,9 +228,7 @@ gcloud run deploy fast-lazy-bee `
   "--set-env-vars=NODE_ENV=production,APP_PORT=3000,MONGO_URL=$MONGO_URL,MONGO_DB_NAME=sample_mflix,ENABLE_RESOURCE_EVENTS=true,RESOURCE_EVENTS_TOPIC=resource-events"
 ```
 
----
-
-### 8.2 Deploy Cloud Function event-processor
+### 7.2 Deploy Cloud Function event-processor
 
 ```powershell
 cd <project-root>
@@ -314,9 +243,7 @@ gcloud functions deploy event-processor `
   "--set-env-vars=ANALYTICS_COLLECTION=movie-stats,PROCESSED_COLLECTION=processed-events,DASHBOARD_UPDATES_TOPIC=dashboard-updates"
 ```
 
----
-
-### 8.3 Deploy gRPC Analytics Service
+### 7.3 Deploy gRPC Analytics Service
 
 ```powershell
 cd <project-root>\grpc-analytics-service
@@ -339,9 +266,7 @@ Read the service URL:
 $GRPC_ANALYTICS_URL=(gcloud run services describe grpc-analytics-service --region $REGION --format="value(status.url)")
 ```
 
----
-
-### 8.4 Deploy WebSocket Gateway
+### 7.4 Deploy WebSocket Gateway
 
 ```powershell
 cd <project-root>\websocket-gateway
@@ -382,9 +307,7 @@ gcloud pubsub subscriptions update dashboard-updates-sub `
   --ack-deadline=30
 ```
 
----
-
-### 8.5 Deploy Dashboard Client
+### 7.5 Deploy Dashboard Client
 
 ```powershell
 $WS_URL=$WS_GATEWAY_URL -replace "^https://","wss://"
@@ -411,11 +334,9 @@ $DASHBOARD_URL=(gcloud run services describe dashboard-client --region $REGION -
 Start-Process $DASHBOARD_URL
 ```
 
----
+## 8. Test and verify
 
-## 9. Test and verify
-
-### 9.1 Full deployment verification
+### 8.1 Full deployment verification
 
 ```powershell
 cd <project-root>
@@ -425,9 +346,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\verify-cloud-deployment.p
 
 This verifies the deployed services, Pub/Sub topics and subscriptions, environment variables, health endpoints, dashboard configuration, gRPC integration and debug endpoint protection.
 
----
-
-### 9.2 gRPC verification
+### 8.2 gRPC verification
 
 ```powershell
 cd <project-root>
@@ -441,9 +360,7 @@ This verifies the internal path:
 websocket-gateway -> gRPC -> grpc-analytics-service -> Firestore
 ```
 
----
-
-### 9.3 Smoke test
+### 8.3 Smoke test
 
 ```powershell
 cd <project-root>
@@ -458,15 +375,9 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 `
   -WaitSeconds 30
 ```
 
-Expected result:
+This test checks that a movie access event passes through the distributed pipeline and becomes visible in the gateway/dashboard state.
 
-```text
-Smoke test completed successfully.
-```
-
----
-
-## 10. Manual test commands
+## 9. Manual test commands
 
 Set URLs:
 
@@ -493,27 +404,17 @@ Trigger a movie view event:
 curl.exe -s -o NUL -H "Cache-Control: no-cache" "$FAST_URL/api/v1/movies/$MOVIE_ID"
 ```
 
-Check gateway state:
+Check gateway state and metrics:
 
 ```powershell
 curl.exe -s "$WS_GATEWAY_URL/snapshot" | jq
-```
-
-Check metrics:
-
-```powershell
 curl.exe -s "$WS_GATEWAY_URL/metrics" | jq
 ```
 
-Check top movies:
+Check top movies and the gRPC path through the gateway:
 
 ```powershell
 curl.exe -s "$WS_GATEWAY_URL/top-movies" | jq
-```
-
-Check the gRPC path through the gateway:
-
-```powershell
 curl.exe -s "$WS_GATEWAY_URL/grpc/top-movies" | jq
 ```
 
@@ -523,9 +424,7 @@ Open the dashboard:
 Start-Process $DASHBOARD_URL
 ```
 
----
-
-## 11. Benchmark commands
+## 10. Benchmark commands
 
 Set common variables:
 
@@ -572,28 +471,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1
   -OutputDir "benchmark-results"
 ```
 
-If `hey` is not available globally, pass its path explicitly:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1 `
-  -Region $REGION `
-  -MovieId $MOVIE_ID `
-  -Requests 100 `
-  -ConcurrencyLevels "1,5,10,20" `
-  -WaitSeconds 45 `
-  -OutputDir "benchmark-results" `
-  -HeyPath "C:\path\to\hey.exe"
-```
-
 Benchmark outputs are saved in:
 
 ```text
 benchmark-results/
 ```
 
----
-
-## 12. Final benchmark summary
+## 11. Final benchmark summary
 
 The final benchmark files used for the report are:
 
@@ -612,5 +496,3 @@ Summary:
 | Concurrency benchmark | 100 requests per run, concurrency 1 / 5 / 10 / 20, all with 0% errors and 100% processing completion. |
 | Best measured REST throughput | 83.08 requests/second at concurrency 20. |
 | Backpressure example | At concurrency 20, 100 processed updates resulted in 9 WebSocket broadcasts and 91 coalesced updates. |
-
----
