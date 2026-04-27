@@ -13,13 +13,7 @@
 
 This project extends the **Fast Lazy Bee** REST API into a distributed cloud application for real-time analytics.
 
-When a movie is accessed through:
-
-```text
-GET /api/v1/movies/:movie_id
-```
-
-the API publishes a `movie_viewed` event to Google Pub/Sub. The event is processed asynchronously by a Cloud Function, stored as aggregated analytics data in Firestore, and then sent to a live dashboard through a WebSocket Gateway.
+When a movie is accessed through `GET /api/v1/movies/:movie_id`, the API publishes a `movie_viewed` event to Google Pub/Sub. The event is processed asynchronously by a Cloud Function, stored as aggregated analytics data in Firestore, and then sent to a live dashboard through a WebSocket Gateway.
 
 The dashboard displays live statistics such as top viewed movies, recent activity, connected clients, latency values, p50/p95/p99 latency and WebSocket backpressure metrics.
 
@@ -63,15 +57,7 @@ The architecture separates the synchronous movie API from the asynchronous analy
 
 The project was developed and tested using Windows PowerShell.
 
-Required tools:
-- Git
-- Node.js
-- npm
-- Google Cloud SDK
-- Docker Desktop
-- `curl.exe`
-- `jq`
-- `hey`
+Required tools: **Git**, **Node.js**, **npm**, **Google Cloud SDK**, **Docker Desktop**, `curl.exe`, `jq`, `hey`.
 
 Required cloud setup:
 - Google Cloud project with billing enabled
@@ -88,51 +74,13 @@ Required Google Cloud APIs:
 
 ## 4. Environment variables
 
-### Fast Lazy Bee API
-
-```text
-NODE_ENV=production
-APP_PORT=3000
-MONGO_URL=<mongodb-atlas-connection-string>
-MONGO_DB_NAME=sample_mflix
-ENABLE_RESOURCE_EVENTS=true
-RESOURCE_EVENTS_TOPIC=resource-events
-```
-
-### Cloud Function
-
-```text
-ANALYTICS_COLLECTION=movie-stats
-PROCESSED_COLLECTION=processed-events
-DASHBOARD_UPDATES_TOPIC=dashboard-updates
-```
-
-### WebSocket Gateway
-
-```text
-ANALYTICS_COLLECTION=movie-stats
-TOP_MOVIES_LIMIT=10
-BACKPRESSURE_ENABLED=true
-BROADCAST_INTERVAL_MS=1000
-ENABLE_DEBUG_ENDPOINTS=true
-DEBUG_TOKEN=pcd-debug-demo-token
-ENABLE_GRPC_ANALYTICS=true
-GRPC_ANALYTICS_TARGET=<grpc-analytics-service-url>
-GRPC_DEADLINE_MS=2000
-```
-
-### gRPC Analytics Service
-
-```text
-ANALYTICS_COLLECTION=movie-stats
-TOP_MOVIES_LIMIT=10
-```
-
-### Dashboard Client
-
-```text
-WS_URL=<websocket-gateway-wss-url>
-```
+| Component | Variables |
+|---|---|
+| Fast Lazy Bee API | `NODE_ENV=production`, `APP_PORT=3000`, `MONGO_URL=<mongodb-atlas-connection-string>`, `MONGO_DB_NAME=sample_mflix`, `ENABLE_RESOURCE_EVENTS=true`, `RESOURCE_EVENTS_TOPIC=resource-events` |
+| Cloud Function | `ANALYTICS_COLLECTION=movie-stats`, `PROCESSED_COLLECTION=processed-events`, `DASHBOARD_UPDATES_TOPIC=dashboard-updates` |
+| WebSocket Gateway | `ANALYTICS_COLLECTION=movie-stats`, `TOP_MOVIES_LIMIT=10`, `BACKPRESSURE_ENABLED=true`, `BROADCAST_INTERVAL_MS=1000`, `ENABLE_DEBUG_ENDPOINTS=true`, `DEBUG_TOKEN=pcd-debug-demo-token`, `ENABLE_GRPC_ANALYTICS=true`, `GRPC_ANALYTICS_TARGET=<grpc-analytics-service-url>`, `GRPC_DEADLINE_MS=2000` |
+| gRPC Analytics Service | `ANALYTICS_COLLECTION=movie-stats`, `TOP_MOVIES_LIMIT=10` |
+| Dashboard Client | `WS_URL=<websocket-gateway-wss-url>` |
 
 ## 5. Local build
 
@@ -157,11 +105,10 @@ node --check grpc-analytics-service\client.js
 
 ## 6. Google Cloud setup
 
-Set common variables:
+Set the project, region and image repository variables:
 
 ```powershell
 cd <project-root>
-
 gcloud auth login
 gcloud config set project <google-cloud-project-id>
 
@@ -171,7 +118,7 @@ $REPO="$REGION-docker.pkg.dev/$PROJECT_ID/myrepo"
 $TAG="final"
 ```
 
-Enable required APIs:
+Enable the required APIs:
 
 ```powershell
 gcloud services enable `
@@ -206,17 +153,10 @@ If a resource already exists, the corresponding creation command can be skipped.
 
 ### 7.1 Deploy Fast Lazy Bee API
 
-Set the MongoDB Atlas connection string:
-
 ```powershell
 $MONGO_URL="<mongodb-atlas-connection-string>"
-```
 
-Build and deploy:
-
-```powershell
 cd <project-root>
-
 gcloud builds submit --tag "$REPO/fast-lazy-bee:$TAG" .
 
 gcloud run deploy fast-lazy-bee `
@@ -247,7 +187,6 @@ gcloud functions deploy event-processor `
 
 ```powershell
 cd <project-root>\grpc-analytics-service
-
 gcloud builds submit --tag "$REPO/grpc-analytics-service:$TAG" .
 
 gcloud run deploy grpc-analytics-service `
@@ -258,11 +197,7 @@ gcloud run deploy grpc-analytics-service `
   --port 8080 `
   --use-http2 `
   "--set-env-vars=ANALYTICS_COLLECTION=movie-stats,TOP_MOVIES_LIMIT=10"
-```
 
-Read the service URL:
-
-```powershell
 $GRPC_ANALYTICS_URL=(gcloud run services describe grpc-analytics-service --region $REGION --format="value(status.url)")
 ```
 
@@ -270,7 +205,6 @@ $GRPC_ANALYTICS_URL=(gcloud run services describe grpc-analytics-service --regio
 
 ```powershell
 cd <project-root>\websocket-gateway
-
 gcloud builds submit --tag "$REPO/websocket-gateway:$TAG" .
 
 gcloud run deploy websocket-gateway `
@@ -282,40 +216,31 @@ gcloud run deploy websocket-gateway `
   --min-instances 1 `
   --max-instances 1 `
   "--set-env-vars=ANALYTICS_COLLECTION=movie-stats,TOP_MOVIES_LIMIT=10,BACKPRESSURE_ENABLED=true,BROADCAST_INTERVAL_MS=1000,ENABLE_DEBUG_ENDPOINTS=true,DEBUG_TOKEN=pcd-debug-demo-token,ENABLE_GRPC_ANALYTICS=true,GRPC_ANALYTICS_TARGET=$GRPC_ANALYTICS_URL,GRPC_DEADLINE_MS=2000"
-```
 
-Read the gateway URL:
-
-```powershell
 $WS_GATEWAY_URL=(gcloud run services describe websocket-gateway --region $REGION --format="value(status.url)")
 ```
 
-Create the push subscription for dashboard updates:
+Create or update the push subscription for dashboard updates:
 
 ```powershell
 gcloud pubsub subscriptions create dashboard-updates-sub `
   --topic=dashboard-updates `
   --push-endpoint="$WS_GATEWAY_URL/pubsub/push" `
   --ack-deadline=30
-```
 
-If the subscription already exists, update it:
-
-```powershell
 gcloud pubsub subscriptions update dashboard-updates-sub `
   --push-endpoint="$WS_GATEWAY_URL/pubsub/push" `
   --ack-deadline=30
 ```
 
+Use the `create` command if the subscription does not exist yet. Use the `update` command if it already exists.
+
 ### 7.5 Deploy Dashboard Client
 
 ```powershell
 $WS_URL=$WS_GATEWAY_URL -replace "^https://","wss://"
-```
 
-```powershell
 cd <project-root>\dashboard-client
-
 gcloud builds submit --tag "$REPO/dashboard-client:$TAG" .
 
 gcloud run deploy dashboard-client `
@@ -325,11 +250,7 @@ gcloud run deploy dashboard-client `
   --allow-unauthenticated `
   --port 8080 `
   "--set-env-vars=WS_URL=$WS_URL"
-```
 
-Read and open the dashboard URL:
-
-```powershell
 $DASHBOARD_URL=(gcloud run services describe dashboard-client --region $REGION --format="value(status.url)")
 Start-Process $DASHBOARD_URL
 ```
@@ -340,7 +261,6 @@ Start-Process $DASHBOARD_URL
 
 ```powershell
 cd <project-root>
-
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\verify-cloud-deployment.ps1 -Region "us-central1"
 ```
 
@@ -350,15 +270,10 @@ This verifies the deployed services, Pub/Sub topics and subscriptions, environme
 
 ```powershell
 cd <project-root>
-
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\verify-grpc-analytics.ps1 -Region "us-central1"
 ```
 
-This verifies the internal path:
-
-```text
-websocket-gateway -> gRPC -> grpc-analytics-service -> Firestore
-```
+This verifies the internal path `websocket-gateway -> gRPC -> grpc-analytics-service -> Firestore`.
 
 ### 8.3 Smoke test
 
@@ -398,22 +313,17 @@ curl.exe -s "$WS_GATEWAY_URL/health" | jq
 curl.exe -s "$DASHBOARD_URL/health" | jq
 ```
 
-Trigger a movie view event:
+Trigger one movie view event:
 
 ```powershell
 curl.exe -s -o NUL -H "Cache-Control: no-cache" "$FAST_URL/api/v1/movies/$MOVIE_ID"
 ```
 
-Check gateway state and metrics:
+Check gateway state, metrics and top movies:
 
 ```powershell
 curl.exe -s "$WS_GATEWAY_URL/snapshot" | jq
 curl.exe -s "$WS_GATEWAY_URL/metrics" | jq
-```
-
-Check top movies and the gRPC path through the gateway:
-
-```powershell
 curl.exe -s "$WS_GATEWAY_URL/top-movies" | jq
 curl.exe -s "$WS_GATEWAY_URL/grpc/top-movies" | jq
 ```
@@ -436,7 +346,7 @@ $MOVIE_ID="573a1390f29313caabcd42e8"
 $env:DEBUG_TOKEN="pcd-debug-demo-token"
 ```
 
-Variable-volume benchmark:
+Run the benchmarks:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-load-series.ps1 `
@@ -445,11 +355,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-load-series.ps1
   -RequestCounts "10,20,50,100" `
   -WaitSeconds 30 `
   -OutputDir "benchmark-results"
-```
 
-Consistency window benchmark:
-
-```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-consistency.ps1 `
   -Region $REGION `
   -MovieId $MOVIE_ID `
@@ -457,11 +363,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-consistency.ps1
   -PollIntervalMs 500 `
   -TimeoutSeconds 30 `
   -OutputDir "benchmark-results"
-```
 
-Concurrency benchmark:
-
-```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1 `
   -Region $REGION `
   -MovieId $MOVIE_ID `
@@ -471,23 +373,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1
   -OutputDir "benchmark-results"
 ```
 
-Benchmark outputs are saved in:
-
-```text
-benchmark-results/
-```
+Benchmark outputs are saved in `benchmark-results/`.
 
 ## 11. Final benchmark summary
 
 The final benchmark files used for the report are:
-
-```text
-benchmark-results/load-series-summary-20260426-214858.csv
-benchmark-results/consistency-summary-20260426-214138.csv
-benchmark-results/concurrency-summary-20260426-215325.csv
-```
-
-Summary:
+- `benchmark-results/load-series-summary-20260426-214858.csv`
+- `benchmark-results/consistency-summary-20260426-214138.csv`
+- `benchmark-results/concurrency-summary-20260426-215325.csv`
 
 | Benchmark | Result |
 |---|---|
