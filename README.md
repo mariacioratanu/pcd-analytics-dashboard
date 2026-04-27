@@ -147,8 +147,6 @@ gcloud pubsub topics create resource-events
 gcloud pubsub topics create dashboard-updates
 ```
 
-If a resource already exists, the corresponding creation command can be skipped.
-
 ## 7. Deploy
 
 ### 7.1 Deploy Fast Lazy Bee API
