@@ -1,0 +1,5 @@
+﻿"timestamp","requests","successfulRequests","failedRequests","errorRatePercent","httpStatusCodes","sendDurationMs","approxRequestRatePerSecond","totalUpdates","processingCompletionPercent","observedUpdateRatePerSecond","totalBroadcasts","coalescedUpdates","sampleCount","latestLatencyMs","p50LatencyMs","p95LatencyMs","p99LatencyMs","backpressureEnabled","broadcastIntervalMs","topMovieTitle","topMovieViews"
+"20260426-214859","10","10","0","0","200:10","2657.28","3.76","10","100","0.33","1","9","10","4822","5066","5893","5893","True","1000","The Great Train Robbery","372"
+"20260426-214939","20","20","0","0","200:20","5139.96","3.89","20","100","0.67","4","16","20","203","388","1959","2299","True","1000","The Great Train Robbery","392"
+"20260426-215023","50","50","0","0","200:50","13002.17","3.85","50","100","1.67","10","40","50","258","181","1315","1621","True","1000","The Great Train Robbery","442"
+"20260426-215114","100","100","0","0","200:100","25955.24","3.85","100","100","3.33","23","77","100","1168","183","700","1166","True","1000","The Great Train Robbery","542"

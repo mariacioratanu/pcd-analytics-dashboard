@@ -1,0 +1,6 @@
+﻿"trial","detected","consistencyWindowMs","totalUpdates","totalBroadcasts","coalescedUpdates","processingLatencyMs","gatewayLatencyMs","endToEndLatencyMs","movieTitle","viewCount","startedAtUtc","processedAt","gatewayReceivedAt"
+"1","True","1154.18","1","0","0","71","275","346","The Great Train Robbery","358","2026-04-26T18:41:46.1698200Z","2026-04-26T18:41:44.223Z","2026-04-26T18:41:44.498Z"
+"2","True","1075.79","1","0","0","70","377","447","The Great Train Robbery","359","2026-04-26T18:41:49.6295135Z","2026-04-26T18:41:47.658Z","2026-04-26T18:41:48.035Z"
+"3","True","1033.68","1","0","0","75","254","329","The Great Train Robbery","360","2026-04-26T18:41:53.0314743Z","2026-04-26T18:41:51.041Z","2026-04-26T18:41:51.295Z"
+"4","True","1061.14","1","0","0","73","264","337","The Great Train Robbery","361","2026-04-26T18:41:56.3913753Z","2026-04-26T18:41:54.417Z","2026-04-26T18:41:54.681Z"
+"5","True","1040.95","1","0","0","72","240","312","The Great Train Robbery","362","2026-04-26T18:41:59.7691873Z","2026-04-26T18:41:57.795Z","2026-04-26T18:41:58.035Z"

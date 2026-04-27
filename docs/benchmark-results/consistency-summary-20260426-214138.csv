@@ -1,0 +1,2 @@
+﻿"timestamp","projectId","region","movieId","trials","successfulTrials","avgConsistencyWindowMs","minConsistencyWindowMs","maxConsistencyWindowMs","avgEndToEndLatencyMs","avgProcessingLatencyMs","avgGatewayLatencyMs"
+"20260426-214138","pcd-lab5-maria-2026","us-central1","573a1390f29313caabcd42e8","5","5","1073.15","1033.68","1154.18","354.2","72.2","282"
