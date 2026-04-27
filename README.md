@@ -231,7 +231,7 @@ gcloud pubsub subscriptions update dashboard-updates-sub `
   --ack-deadline=30
 ```
 
-Use the `create` command if the subscription does not exist yet. Use the `update` command if it already exists.
+The first command creates the push subscription. If the subscription was already created during a previous deployment, the second command refreshes its push endpoint.
 
 ### 7.5 Deploy Dashboard Client
 
