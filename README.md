@@ -1,95 +1,126 @@
-# PCD Cloud Distributed Applications
+# PCD Cloud Distributed Applications  
+## Real-Time Analytics Dashboard
 
 **Course:** Concurrent and Distributed Programming  
-**Selected assignment:** Project 1 - Real-Time Analytics Dashboard
+**Assignment:** Project 1 - Real-Time Analytics Dashboard  
 
-**👥 Team members:**
-- Ciorâțanu Maria (MISS11)
-- Pâncă Aida-Gabriela (MISS11)
-- Varzar Alina-Miruna (MISS11)
-
-This repository contains a distributed cloud application built for the **Concurrent and Distributed Programming** course. The project extends the original **Fast Lazy Bee** REST API into an event-driven analytics system deployed on Google Cloud.
-
-The system collects events when movie resources are accessed, processes them asynchronously, stores aggregated statistics, and updates a live dashboard in real time through WebSocket communication.
+**Team members:**
+- Ciorâțanu Maria - MISS11
+- Pâncă Aida-Gabriela - MISS11
+- Varzar Alina-Miruna - MISS11
 
 ---
 
-## ⚙️ 1. Project overview
+## 1. Project overview
 
-The goal of this project is to build a distributed cloud application that collects, processes, and displays real-time analytics about resource access.
+This project extends the **Fast Lazy Bee** REST API into a distributed cloud application for real-time analytics.
 
-In this implementation, the monitored resource is a movie from the Fast Lazy Bee API.
-
-When a movie is accessed through:
+The system tracks movie accesses from the base API. When a movie is requested through:
 
 ```text
 GET /api/v1/movies/:movie_id
 ```
 
-the base application publishes a `movie_viewed` event to Google Pub/Sub. The event is then processed asynchronously by a Cloud Function, stored in Firestore, and forwarded to a WebSocket Gateway that updates the dashboard in real time.
+the application publishes a `movie_viewed` event to Google Pub/Sub. The event is processed asynchronously by a Cloud Function, stored as aggregated analytics data in Firestore, and then forwarded to a live dashboard through a WebSocket Gateway.
 
-The project also includes:
+The dashboard displays:
 
-- Google Cloud Run services;
-- a Google Cloud Function Gen2 component;
-- Google Pub/Sub topics and subscriptions;
-- Firestore as the stateful analytics store;
-- WebSocket real-time communication;
-- gRPC internal communication as a bonus feature;
-- backpressure through WebSocket update coalescing;
-- latency charts with p50, p95 and p99 metrics;
-- benchmark scripts for load, concurrency, consistency and backpressure analysis.
+- top viewed movies
+- recent movie access activity
+- number of connected dashboard clients
+- end-to-end latency
+- p50, p95 and p99 latency
+- WebSocket broadcast metrics
+- backpressure/coalescing metrics
+
+The system is **event-driven** and **eventually consistent**. The REST API returns the movie response immediately, while the analytics update appears in the dashboard shortly afterward.
 
 ---
 
 ## 2. Architecture
 
-The implemented architecture follows the proposed architecture for **Project 1 — Real-Time Analytics Dashboard**.
-
 ```mermaid
 flowchart LR
-    Client[Client Web Browser]
+    Browser[Browser / User]
 
     subgraph GoogleCloud[Google Cloud]
-        A[Service A: Fast Lazy Bee REST API<br/>Cloud Run]
-        DB[(MongoDB Atlas<br/>Base Application Database)]
+        A[Fast Lazy Bee API<br/>Cloud Run]
+        Mongo[(MongoDB Atlas<br/>Base app database)]
+
         Topic1[Pub/Sub Topic<br/>resource-events]
         CF[Cloud Function Gen2<br/>event-processor]
-        FS[(Firestore<br/>movie-stats + processed-events)]
+
+        Firestore[(Firestore<br/>movie-stats + processed-events)]
         Topic2[Pub/Sub Topic<br/>dashboard-updates]
+
         WS[WebSocket Gateway<br/>Cloud Run]
         GRPC[gRPC Analytics Service<br/>Cloud Run]
-        DASH[Dashboard Client<br/>Cloud Run]
+        Dashboard[Dashboard Client<br/>Cloud Run]
     end
 
-    Client -->|HTTP REST| A
-    A --> DB
-    A -->|publish movie_viewed event| Topic1
+    Browser -->|HTTP REST| A
+    A --> Mongo
+    A -->|movie_viewed event| Topic1
     Topic1 -->|trigger| CF
-    CF -->|write aggregated stats| FS
-    CF -->|publish dashboard update| Topic2
+    CF -->|aggregate stats + idempotency| Firestore
+    CF -->|dashboard update| Topic2
     Topic2 -->|push subscription| WS
-    WS -->|query top movies| GRPC
-    GRPC -->|read stats| FS
-    DASH -->|WebSocket| WS
-    Client -->|opens dashboard| DASH
+    WS -->|gRPC GetTopMovies| GRPC
+    GRPC -->|read stats| Firestore
+    Dashboard -->|WebSocket| WS
+    Browser -->|opens dashboard| Dashboard
 ```
 
-The system is **event-driven** and **eventually consistent**. The REST API returns the movie response immediately, while the analytics update becomes visible in the dashboard shortly afterward.
+Main event flow:
+
+```text
+GET /api/v1/movies/:movie_id
+-> Fast Lazy Bee publishes movie_viewed event
+-> Pub/Sub topic resource-events
+-> Cloud Function Gen2 event-processor
+-> Firestore aggregation
+-> Pub/Sub topic dashboard-updates
+-> WebSocket Gateway
+-> Dashboard Client
+```
 
 ---
 
-## 3. Main components
+## 3. Implemented components
 
-### 3.1 Fast Lazy Bee REST API / Service A
+| Component | Deployment type | Role |
+|---|---|---|
+| **Fast Lazy Bee API** | Cloud Run | Base REST API. Publishes a `movie_viewed` event when a movie is accessed. |
+| **event-processor** | Cloud Function Gen2 | Processes Pub/Sub events, updates Firestore statistics and implements idempotency. |
+| **WebSocket Gateway** | Cloud Run | Receives dashboard updates and broadcasts them to connected WebSocket clients. |
+| **Dashboard Client** | Cloud Run | Minimal HTML/CSS/JavaScript frontend for live analytics. |
+| **gRPC Analytics Service** | Cloud Run | Internal gRPC service used by the gateway to read top movie statistics from Firestore. |
 
-**Location:**
+The project uses more than the minimum required number of independently deployed components.
 
-```text
-src/
-```
+---
 
-**Main modified files:**
+## 4. Cloud services used
+
+| Cloud service | Usage |
+|---|---|
+| **Google Cloud Run** | Runs Fast Lazy Bee, WebSocket Gateway, Dashboard Client and gRPC Analytics Service. |
+| **Google Cloud Functions Gen2** | Runs the FaaS event processor. |
+| **Google Pub/Sub** | Connects services asynchronously through event topics. |
+| **Google Firestore** | Stateful analytics storage for movie statistics and processed event IDs. |
+| **Google Cloud Build** | Builds container images. |
+| **Google Artifact Registry** | Stores container images. |
+| **MongoDB Atlas** | Stores the original Fast Lazy Bee movie data. |
+
+Firestore is the stateful analytics store. MongoDB Atlas remains the operational database of the original Fast Lazy Bee application.
+
+---
+
+## 5. Main implementation details
+
+### 5.1 Fast Lazy Bee / Service A
+
+Main modified files:
 
 ```text
 src/routes/movies/movie_id/movie-id-routes.ts
@@ -97,15 +128,15 @@ src/utils/pubsub-utils.ts
 src/schemas/dotenv.ts
 ```
 
-**Responsibilities:**
+Responsibilities:
 
-- exposes the original Fast Lazy Bee REST API;
-- keeps the existing CRUD and authentication functionality;
-- reads movie data from MongoDB Atlas;
-- publishes a `movie_viewed` event when a movie is accessed through `GET /movies/:movie_id`;
-- publishes events to the Pub/Sub topic `resource-events`.
+- keeps the original Fast Lazy Bee REST API functionality
+- reads movie data from MongoDB Atlas
+- publishes a `movie_viewed` event when a movie is accessed through `GET /api/v1/movies/:movie_id`
+- publishes events to the Pub/Sub topic `resource-events`
+- uses environment variables to enable or disable event publishing
 
-Only `GET` requests generate analytics events. `HEAD` requests are kept for API compatibility but do not generate movie view events.
+Only `GET` requests generate analytics events. `HEAD` requests remain supported for API compatibility, but they do not publish movie view events.
 
 Example event payload:
 
@@ -121,26 +152,28 @@ Example event payload:
 }
 ```
 
+The event publishing is fire-and-forget. If publishing fails, the error is logged, but the REST response is not blocked by the analytics pipeline.
+
 ---
 
-### 3.2 Cloud Function Gen2 — event-processor
+### 5.2 Cloud Function Gen2 - event-processor
 
-**Location:**
+Location:
 
 ```text
 functions/event-processor/
 ```
 
-**Responsibilities:**
+Responsibilities:
 
-- triggered automatically by messages from the `resource-events` Pub/Sub topic;
-- decodes the movie view event;
-- updates aggregated movie statistics in Firestore;
-- stores processed message identifiers in `processed-events`;
-- implements idempotency for Pub/Sub at-least-once delivery;
-- publishes processed dashboard updates to the `dashboard-updates` Pub/Sub topic.
+- triggered by messages from the `resource-events` Pub/Sub topic
+- decodes the movie view event
+- updates aggregated movie statistics in Firestore
+- stores processed message identifiers in `processed-events`
+- implements idempotency for Pub/Sub at-least-once delivery
+- publishes processed dashboard updates to the `dashboard-updates` Pub/Sub topic
 
-**Firestore collections:**
+Firestore collections:
 
 ```text
 movie-stats
@@ -148,30 +181,29 @@ processed-events
 ```
 
 `movie-stats` stores aggregated analytics per movie.  
-`processed-events` stores processed message IDs and prevents duplicate processing.
+`processed-events` stores processed message IDs and prevents duplicate processing of the same Pub/Sub delivery.
 
 ---
 
-### 3.3 WebSocket Gateway
+### 5.3 WebSocket Gateway
 
-**Location:**
+Location:
 
 ```text
 websocket-gateway/
 ```
 
-**Responsibilities:**
+Responsibilities:
 
-- runs as a separate Cloud Run service;
-- maintains active WebSocket client connections;
-- receives processed dashboard events through a Pub/Sub push subscription;
-- broadcasts real-time updates to connected dashboard clients;
-- exposes runtime endpoints for demo, debugging and benchmarks;
-- computes runtime metrics;
-- applies backpressure through update coalescing;
-- uses gRPC to retrieve top movie statistics from the internal gRPC Analytics Service.
+- maintains WebSocket connections with dashboard clients
+- receives processed dashboard events through a Pub/Sub push subscription
+- broadcasts real-time updates to connected clients
+- exposes runtime metrics through HTTP endpoints
+- applies backpressure through update coalescing
+- retrieves top movies through the gRPC Analytics Service
+- falls back to Firestore/memory if the gRPC path is unavailable
 
-**Important endpoints:**
+Important endpoints:
 
 ```text
 GET  /health
@@ -184,171 +216,77 @@ POST /debug/reset
 POST /debug/close-clients
 ```
 
-For demo stability, the WebSocket Gateway is deployed with a single Cloud Run instance. This keeps WebSocket connection state inside one instance.
-
-A production-grade multi-instance version would require shared connection state or a fanout mechanism such as Redis, Pub/Sub fanout, sticky sessions or a dedicated real-time messaging layer.
+The WebSocket Gateway is deployed with one Cloud Run instance for demo stability, because WebSocket connections are stateful inside the gateway process.
 
 ---
 
-### 3.4 gRPC Analytics Service
+### 5.4 gRPC Analytics Service
 
-**Location:**
+Location:
 
 ```text
 grpc-analytics-service/
 ```
 
-**Responsibilities:**
+Responsibilities:
 
-- runs as a separate Cloud Run service;
-- exposes an internal gRPC API;
-- reads top movie statistics from Firestore;
-- is called by the WebSocket Gateway;
-- demonstrates internal service-to-service communication through gRPC.
+- exposes an internal gRPC API
+- reads top movie statistics from Firestore
+- is called by the WebSocket Gateway
+- demonstrates internal service-to-service communication
 
-**Proto file:**
-
-```text
-grpc-analytics-service/proto/analytics.proto
-```
-
-**Implemented RPC methods:**
+Implemented RPC methods:
 
 ```text
 Health
 GetTopMovies
 ```
 
-The normal `/top-movies` endpoint in the WebSocket Gateway uses gRPC first and falls back to Firestore if the gRPC call fails.
+Proto file:
+
+```text
+grpc-analytics-service/proto/analytics.proto
+```
+
+The WebSocket Gateway uses gRPC as the primary path for retrieving top movies. If the gRPC call fails, the gateway falls back to Firestore.
 
 ---
 
-### 3.5 Dashboard Client
+### 5.5 Dashboard Client
 
-**Location:**
+Location:
 
 ```text
 dashboard-client/
 ```
 
-**Responsibilities:**
+Responsibilities:
 
-- runs as a separate Cloud Run service;
-- serves a minimal frontend implemented with plain HTML, CSS and JavaScript;
-- connects to the WebSocket Gateway;
-- loads an initial snapshot;
-- displays live analytics data.
+- serves a minimal frontend implemented with HTML, CSS and JavaScript
+- connects to the WebSocket Gateway
+- loads an initial snapshot
+- receives live updates through WebSocket
+- automatically reconnects if the WebSocket connection is closed
 
-The dashboard shows:
+The dashboard displays:
 
-- WebSocket connection status;
-- connected clients;
-- total updates;
-- total broadcasts;
-- coalesced updates;
-- latest end-to-end latency;
-- p50, p95 and p99 latency;
-- real-time latency chart;
-- top viewed movies;
-- last processed update;
-- recent activity;
-- reconnect attempts.
-
-The dashboard also reconnects automatically after a WebSocket disconnection.
+- connection status
+- connected clients
+- total updates
+- total broadcasts
+- coalesced updates
+- latest end-to-end latency
+- p50, p95 and p99 latency
+- real-time latency chart
+- top viewed movies
+- recent activity
+- last processed update
 
 ---
 
-## 4. Cloud services used
-
-The project uses the following cloud-native services:
+## 6. Repository structure
 
 ```text
-Google Cloud Run
-Google Cloud Functions Gen2
-Google Pub/Sub
-Google Firestore
-Google Cloud Build
-Google Artifact Registry
-MongoDB Atlas
-```
-
-At least one stateful service is used. In this project, Firestore stores analytics state, while MongoDB Atlas stores the base application data.
-
----
-
-## 5. Pub/Sub topics and subscriptions
-
-### Topics
-
-```text
-resource-events
-dashboard-updates
-```
-
-### Flow
-
-`resource-events` receives movie view events from Service A.
-
-`dashboard-updates` receives processed dashboard updates from the Cloud Function.
-
-The WebSocket Gateway receives messages from `dashboard-updates` through a Pub/Sub push subscription.
-
----
-
-## 6. Environment variables
-
-### 6.1 Fast Lazy Bee / Service A
-
-```text
-MONGO_URL
-MONGO_DB_NAME
-ENABLE_RESOURCE_EVENTS=true
-RESOURCE_EVENTS_TOPIC=resource-events
-```
-
-### 6.2 Cloud Function — event-processor
-
-```text
-ANALYTICS_COLLECTION=movie-stats
-PROCESSED_COLLECTION=processed-events
-DASHBOARD_UPDATES_TOPIC=dashboard-updates
-```
-
-### 6.3 WebSocket Gateway
-
-```text
-ANALYTICS_COLLECTION=movie-stats
-TOP_MOVIES_LIMIT=10
-BACKPRESSURE_ENABLED=true
-BROADCAST_INTERVAL_MS=1000
-ENABLE_DEBUG_ENDPOINTS=true
-DEBUG_TOKEN=pcd-debug-demo-token
-ENABLE_GRPC_ANALYTICS=true
-GRPC_ANALYTICS_TARGET=https://grpc-analytics-service-url
-GRPC_DEADLINE_MS=2000
-```
-
-### 6.4 gRPC Analytics Service
-
-```text
-ANALYTICS_COLLECTION=movie-stats
-TOP_MOVIES_LIMIT=10
-```
-
-### 6.5 Dashboard Client
-
-```text
-WS_URL=wss://websocket-gateway-url
-```
-
----
-
-## 7. Repository structure
-
-```text
-.github/
-  workflows/
-
 dashboard-client/
   app.js
   Dockerfile
@@ -389,7 +327,6 @@ websocket-gateway/
   index.js
   package.json
 
-.dockerignore
 .env.sample
 .gitignore
 Dockerfile
@@ -402,46 +339,104 @@ tsconfig.json
 
 ---
 
-## 8. Prerequisites
+## 7. Prerequisites
 
-The project was developed and tested on Windows using PowerShell.
+The project was developed and tested mainly on Windows using PowerShell.
 
 Required tools:
 
 ```text
+Git
 Node.js
 npm
 Docker Desktop
 Google Cloud SDK
-Git
 curl.exe
 jq
 hey
 ```
 
-The benchmark script for concurrency uses `hey`.
+Google Cloud requirements:
 
-If `hey` is not available globally, it can be passed explicitly:
+```text
+Google Cloud project
+Billing enabled
+Cloud Run API
+Cloud Functions API
+Cloud Build API
+Pub/Sub API
+Firestore API
+Artifact Registry API
+Eventarc API
+```
 
-```powershell
--HeyPath "C:\Users\maria\tools\hey\hey.exe"
+External database:
+
+```text
+MongoDB Atlas cluster with the sample_mflix database imported
+```
+
+The MongoDB Atlas connection string is required during deployment.
+
+---
+
+## 8. Environment variables
+
+### 8.1 Fast Lazy Bee / Service A
+
+```text
+NODE_ENV=production
+APP_PORT=3000
+MONGO_URL=<mongodb-atlas-connection-string>
+MONGO_DB_NAME=sample_mflix
+ENABLE_RESOURCE_EVENTS=true
+RESOURCE_EVENTS_TOPIC=resource-events
+```
+
+### 8.2 Cloud Function - event-processor
+
+```text
+ANALYTICS_COLLECTION=movie-stats
+PROCESSED_COLLECTION=processed-events
+DASHBOARD_UPDATES_TOPIC=dashboard-updates
+```
+
+### 8.3 WebSocket Gateway
+
+```text
+ANALYTICS_COLLECTION=movie-stats
+TOP_MOVIES_LIMIT=10
+BACKPRESSURE_ENABLED=true
+BROADCAST_INTERVAL_MS=1000
+ENABLE_DEBUG_ENDPOINTS=true
+DEBUG_TOKEN=pcd-debug-demo-token
+ENABLE_GRPC_ANALYTICS=true
+GRPC_ANALYTICS_TARGET=<grpc-analytics-service-url>
+GRPC_DEADLINE_MS=2000
+```
+
+### 8.4 gRPC Analytics Service
+
+```text
+ANALYTICS_COLLECTION=movie-stats
+TOP_MOVIES_LIMIT=10
+```
+
+### 8.5 Dashboard Client
+
+```text
+WS_URL=<websocket-gateway-wss-url>
 ```
 
 ---
 
-## 9. Local build
+## 9. Local build and syntax checks
 
 From the repository root:
 
 ```powershell
-cd C:\Users\maria\pcd\project
-```
-
-```powershell
+cd <project-root>
 npm install
-```
-
-```powershell
 npm run build
 ```
 
@@ -451,37 +446,14 @@ Expected result:
 The TypeScript project builds successfully.
 ```
 
----
-
-## 10. Local syntax checks
-
-The JavaScript services can be checked with:
-
-```powershell
-cd C:\Users\maria\pcd\project
-```
+Optional JavaScript syntax checks:
 
 ```powershell
 node --check functions/event-processor\index.js
-```
-
-```powershell
 node --check websocket-gateway\index.js
-```
-
-```powershell
 node --check dashboard-client\server.js
-```
-
-```powershell
 node --check dashboard-client\app.js
-```
-
-```powershell
 node --check grpc-analytics-service\index.js
-```
-
-```powershell
 node --check grpc-analytics-service\client.js
 ```
 
@@ -493,85 +465,125 @@ No syntax errors are printed.
 
 ---
 
-## 11. Cloud deployment
-
-The following commands show the deployment flow used for the main services.
+## 10. Google Cloud resource setup
 
 Set common variables:
 
 ```powershell
-cd C:\Users\maria\pcd\project
-```
+cd <project-root>
 
-```powershell
 $REGION="us-central1"
-```
-
-```powershell
 $PROJECT_ID=(gcloud config get-value project)
-```
-
-```powershell
 $REPO="$REGION-docker.pkg.dev/$PROJECT_ID/myrepo"
+$TAG="final"
 ```
 
+Enable required APIs:
+
 ```powershell
-$TAG="final"
+gcloud services enable `
+  run.googleapis.com `
+  cloudfunctions.googleapis.com `
+  cloudbuild.googleapis.com `
+  pubsub.googleapis.com `
+  firestore.googleapis.com `
+  artifactregistry.googleapis.com `
+  eventarc.googleapis.com
+```
+
+Set the Cloud Run region:
+
+```powershell
+gcloud config set run/region $REGION
+```
+
+Create the Artifact Registry repository:
+
+```powershell
+gcloud artifacts repositories create myrepo `
+  --repository-format=docker `
+  --location=$REGION `
+  --description="Docker repository"
+```
+
+Create the Firestore database:
+
+```powershell
+gcloud firestore databases create --location=$REGION
+```
+
+Create Pub/Sub topics:
+
+```powershell
+gcloud pubsub topics create resource-events
+gcloud pubsub topics create dashboard-updates
 ```
 
 ---
 
+## 11. Cloud deployment
+
 ### 11.1 Deploy Fast Lazy Bee / Service A
 
-Run from the repository root:
+Set the MongoDB Atlas URL before deploying:
 
 ```powershell
-cd C:\Users\maria\pcd\project
+$MONGO_URL="<mongodb-atlas-connection-string>"
 ```
 
+Build and deploy the main service:
+
 ```powershell
+cd <project-root>
+
 gcloud builds submit --tag "$REPO/fast-lazy-bee:$TAG" .
-```
 
-```powershell
-gcloud run deploy fast-lazy-bee --image "$REPO/fast-lazy-bee:$TAG" --platform managed --region $REGION --allow-unauthenticated --port 3000 --set-env-vars ENABLE_RESOURCE_EVENTS=true,RESOURCE_EVENTS_TOPIC=resource-events
+gcloud run deploy fast-lazy-bee `
+  --image "$REPO/fast-lazy-bee:$TAG" `
+  --platform managed `
+  --region $REGION `
+  --allow-unauthenticated `
+  --port 3000 `
+  "--set-env-vars=NODE_ENV=production,APP_PORT=3000,MONGO_URL=$MONGO_URL,MONGO_DB_NAME=sample_mflix,ENABLE_RESOURCE_EVENTS=true,RESOURCE_EVENTS_TOPIC=resource-events"
 ```
-
-The deployed service also needs `MONGO_URL`, `MONGO_DB_NAME` and the normal Fast Lazy Bee configuration.
 
 ---
 
 ### 11.2 Deploy Cloud Function Gen2 / event-processor
 
-Run from the repository root:
-
 ```powershell
-cd C:\Users\maria\pcd\project
-```
+cd <project-root>
 
-```powershell
-gcloud functions deploy event-processor --gen2 --runtime nodejs22 --region $REGION --source functions/event-processor --entry-point processResourceEvent --trigger-topic resource-events --set-env-vars ANALYTICS_COLLECTION=movie-stats,PROCESSED_COLLECTION=processed-events,DASHBOARD_UPDATES_TOPIC=dashboard-updates
+gcloud functions deploy event-processor `
+  --gen2 `
+  --runtime nodejs22 `
+  --region $REGION `
+  --source functions/event-processor `
+  --entry-point processResourceEvent `
+  --trigger-topic resource-events `
+  "--set-env-vars=ANALYTICS_COLLECTION=movie-stats,PROCESSED_COLLECTION=processed-events,DASHBOARD_UPDATES_TOPIC=dashboard-updates"
 ```
 
 ---
 
 ### 11.3 Deploy gRPC Analytics Service
 
-Run from the service folder:
-
 ```powershell
-cd C:\Users\maria\pcd\project\grpc-analytics-service
-```
+cd <project-root>\grpc-analytics-service
 
-```powershell
 gcloud builds submit --tag "$REPO/grpc-analytics-service:$TAG" .
+
+gcloud run deploy grpc-analytics-service `
+  --image "$REPO/grpc-analytics-service:$TAG" `
+  --platform managed `
+  --region $REGION `
+  --allow-unauthenticated `
+  --port 8080 `
+  --use-http2 `
+  "--set-env-vars=ANALYTICS_COLLECTION=movie-stats,TOP_MOVIES_LIMIT=10"
 ```
 
-```powershell
-gcloud run deploy grpc-analytics-service --image "$REPO/grpc-analytics-service:$TAG" --platform managed --region $REGION --allow-unauthenticated --port 8080 --use-http2 --set-env-vars ANALYTICS_COLLECTION=movie-stats,TOP_MOVIES_LIMIT=10
-```
-
-Get the service URL:
+Read the deployed service URL:
 
 ```powershell
 $GRPC_ANALYTICS_URL=(gcloud run services describe grpc-analytics-service --region $REGION --format="value(status.url)")
@@ -581,100 +593,113 @@ $GRPC_ANALYTICS_URL=(gcloud run services describe grpc-analytics-service --regio
 
 ### 11.4 Deploy WebSocket Gateway
 
-Run from the service folder:
-
 ```powershell
-cd C:\Users\maria\pcd\project\websocket-gateway
-```
+cd <project-root>\websocket-gateway
 
-```powershell
 gcloud builds submit --tag "$REPO/websocket-gateway:$TAG" .
+
+gcloud run deploy websocket-gateway `
+  --image "$REPO/websocket-gateway:$TAG" `
+  --platform managed `
+  --region $REGION `
+  --allow-unauthenticated `
+  --port 8080 `
+  --min-instances 1 `
+  --max-instances 1 `
+  "--set-env-vars=ANALYTICS_COLLECTION=movie-stats,TOP_MOVIES_LIMIT=10,BACKPRESSURE_ENABLED=true,BROADCAST_INTERVAL_MS=1000,ENABLE_DEBUG_ENDPOINTS=true,DEBUG_TOKEN=pcd-debug-demo-token,ENABLE_GRPC_ANALYTICS=true,GRPC_ANALYTICS_TARGET=$GRPC_ANALYTICS_URL,GRPC_DEADLINE_MS=2000"
 ```
 
-```powershell
-gcloud run deploy websocket-gateway --image "$REPO/websocket-gateway:$TAG" --platform managed --region $REGION --allow-unauthenticated --port 8080 --min-instances 1 --max-instances 1 --set-env-vars ANALYTICS_COLLECTION=movie-stats,TOP_MOVIES_LIMIT=10,BACKPRESSURE_ENABLED=true,BROADCAST_INTERVAL_MS=1000,ENABLE_DEBUG_ENDPOINTS=true,DEBUG_TOKEN=pcd-debug-demo-token,ENABLE_GRPC_ANALYTICS=true,GRPC_ANALYTICS_TARGET=$GRPC_ANALYTICS_URL,GRPC_DEADLINE_MS=2000
-```
-
-Get the WebSocket Gateway URL:
+Read the deployed gateway URL:
 
 ```powershell
 $WS_GATEWAY_URL=(gcloud run services describe websocket-gateway --region $REGION --format="value(status.url)")
+```
+
+Create the Pub/Sub push subscription that sends dashboard updates to the WebSocket Gateway:
+
+```powershell
+gcloud pubsub subscriptions create dashboard-updates-sub `
+  --topic=dashboard-updates `
+  --push-endpoint="$WS_GATEWAY_URL/pubsub/push" `
+  --ack-deadline=30
+```
+
+If the subscription already exists, update it instead:
+
+```powershell
+gcloud pubsub subscriptions update dashboard-updates-sub `
+  --push-endpoint="$WS_GATEWAY_URL/pubsub/push" `
+  --ack-deadline=30
 ```
 
 ---
 
 ### 11.5 Deploy Dashboard Client
 
-Run from the dashboard folder:
-
-```powershell
-cd C:\Users\maria\pcd\project\dashboard-client
-```
+Convert the HTTPS gateway URL to a WebSocket URL:
 
 ```powershell
 $WS_URL=$WS_GATEWAY_URL -replace "^https://","wss://"
 ```
 
+Build and deploy the dashboard:
+
 ```powershell
+cd <project-root>\dashboard-client
+
 gcloud builds submit --tag "$REPO/dashboard-client:$TAG" .
+
+gcloud run deploy dashboard-client `
+  --image "$REPO/dashboard-client:$TAG" `
+  --platform managed `
+  --region $REGION `
+  --allow-unauthenticated `
+  --port 8080 `
+  "--set-env-vars=WS_URL=$WS_URL"
 ```
 
-```powershell
-gcloud run deploy dashboard-client --image "$REPO/dashboard-client:$TAG" --platform managed --region $REGION --allow-unauthenticated --port 8080 --set-env-vars WS_URL=$WS_URL
-```
-
-Get the dashboard URL:
+Read and open the dashboard URL:
 
 ```powershell
 $DASHBOARD_URL=(gcloud run services describe dashboard-client --region $REGION --format="value(status.url)")
-```
-
-Open it:
-
-```powershell
 Start-Process $DASHBOARD_URL
 ```
 
 ---
 
-## 12. Verification scripts
+## 12. Testing and verification
 
-The repository includes scripts that verify the deployed system.
-
-### 12.1 Verify full cloud deployment
+### 12.1 Full cloud deployment verification
 
 ```powershell
-cd C:\Users\maria\pcd\project
-```
+cd <project-root>
 
-```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\verify-cloud-deployment.ps1 -Region "us-central1"
 ```
 
-This checks:
+This script checks:
 
-- Cloud Run services;
-- Cloud Function;
-- Pub/Sub topics and subscriptions;
-- environment variables;
-- health endpoints;
-- dashboard runtime config;
-- gRPC integration;
-- debug endpoint protection.
+- Cloud Run services
+- Cloud Function Gen2
+- Pub/Sub topics and subscriptions
+- required environment variables
+- health endpoints
+- dashboard runtime config
+- WebSocket Gateway `/metrics` and `/snapshot`
+- gRPC integration
+- debug endpoint protection
 
 ---
 
-### 12.2 Verify gRPC integration
+### 12.2 gRPC verification
 
 ```powershell
-cd C:\Users\maria\pcd\project
-```
+cd <project-root>
 
-```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\verify-grpc-analytics.ps1 -Region "us-central1"
 ```
 
-This checks the flow:
+This validates the internal communication path:
 
 ```text
 websocket-gateway -> gRPC -> grpc-analytics-service -> Firestore
@@ -685,69 +710,89 @@ websocket-gateway -> gRPC -> grpc-analytics-service -> Firestore
 ### 12.3 Smoke test
 
 ```powershell
-cd C:\Users\maria\pcd\project
-```
+cd <project-root>
 
-```powershell
+$REGION="us-central1"
+$MOVIE_ID="573a1390f29313caabcd42e8"
 $env:DEBUG_TOKEN="pcd-debug-demo-token"
+
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 `
+  -Region $REGION `
+  -MovieId $MOVIE_ID `
+  -WaitSeconds 30
 ```
 
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 -Region "us-central1" -MovieId "573a1390f29313caabcd42e8" -WaitSeconds 30
-```
-
-This tests the complete flow:
+The smoke test validates the complete pipeline:
 
 ```text
-GET /movies/:id
+REST request
 -> Pub/Sub resource-events
 -> Cloud Function event-processor
 -> Firestore movie-stats
 -> Pub/Sub dashboard-updates
 -> WebSocket Gateway
--> Dashboard Client
+-> Dashboard state
+```
+
+Expected result:
+
+```text
+Smoke test completed successfully
 ```
 
 ---
 
-## 13. Manual functional test
+## 13. Manual runtime commands
 
-Set service URLs:
-
-```powershell
-cd C:\Users\maria\pcd\project
-```
+Set common runtime variables:
 
 ```powershell
+cd <project-root>
+
 $REGION="us-central1"
-```
+$MOVIE_ID="573a1390f29313caabcd42e8"
 
-```powershell
 $FAST_URL=(gcloud run services describe fast-lazy-bee --region $REGION --format="value(status.url)")
-```
-
-```powershell
 $WS_GATEWAY_URL=(gcloud run services describe websocket-gateway --region $REGION --format="value(status.url)")
-```
-
-```powershell
 $DASHBOARD_URL=(gcloud run services describe dashboard-client --region $REGION --format="value(status.url)")
 ```
 
+Check service health:
+
 ```powershell
-$MOVIE_ID="573a1390f29313caabcd42e8"
+curl.exe -s "$FAST_URL/api/v1/health" | jq
+curl.exe -s "$WS_GATEWAY_URL/health" | jq
+curl.exe -s "$DASHBOARD_URL/health" | jq
 ```
 
-Trigger a movie view event:
+Trigger one movie view event:
 
 ```powershell
 curl.exe -s -o NUL -H "Cache-Control: no-cache" "$FAST_URL/api/v1/movies/$MOVIE_ID"
 ```
 
-Check the WebSocket Gateway snapshot:
+Check the gateway snapshot:
 
 ```powershell
 curl.exe -s "$WS_GATEWAY_URL/snapshot" | jq
+```
+
+Check runtime metrics:
+
+```powershell
+curl.exe -s "$WS_GATEWAY_URL/metrics" | jq
+```
+
+Check top movies:
+
+```powershell
+curl.exe -s "$WS_GATEWAY_URL/top-movies" | jq
+```
+
+Check top movies through the gRPC path:
+
+```powershell
+curl.exe -s "$WS_GATEWAY_URL/grpc/top-movies" | jq
 ```
 
 Open the dashboard:
@@ -756,190 +801,154 @@ Open the dashboard:
 Start-Process $DASHBOARD_URL
 ```
 
-Expected result:
-
-- `metrics.totalUpdates` increases;
-- `lastProcessedUpdate` is populated;
-- `topMovies` contains the viewed movie;
-- the dashboard updates without refreshing the page.
-
 ---
 
-## 14. Runtime endpoints
+## 14. Debug endpoints
 
-### Fast Lazy Bee health
+The debug endpoints are used only for demo and benchmark reproducibility. They are protected with the `x-debug-token` header.
 
-```powershell
-curl.exe -s "$FAST_URL/api/v1/health" | jq
-```
-
-### WebSocket Gateway health
-
-```powershell
-curl.exe -s "$WS_GATEWAY_URL/health" | jq
-```
-
-### WebSocket Gateway metrics
-
-```powershell
-curl.exe -s "$WS_GATEWAY_URL/metrics" | jq
-```
-
-### WebSocket Gateway snapshot
-
-```powershell
-curl.exe -s "$WS_GATEWAY_URL/snapshot" | jq
-```
-
-### Top viewed movies
-
-```powershell
-curl.exe -s "$WS_GATEWAY_URL/top-movies" | jq
-```
-
-### gRPC top movies through gateway
-
-```powershell
-curl.exe -s "$WS_GATEWAY_URL/grpc/top-movies" | jq
-```
-
-### Dashboard health
-
-```powershell
-curl.exe -s "$DASHBOARD_URL/health" | jq
-```
-
-### Dashboard runtime config
-
-```powershell
-curl.exe -s "$DASHBOARD_URL/config.js"
-```
-
----
-
-## 15. Debug endpoints
-
-The debug endpoints are enabled only for demo and benchmark reproducibility.
-
-They are protected using the `x-debug-token` header.
-
-### Reset runtime metrics
-
-```powershell
-curl.exe -s -X POST -H "Content-Type: application/json" -H "x-debug-token: pcd-debug-demo-token" --data "{}" "$WS_GATEWAY_URL/debug/reset" | jq
-```
-
-This clears in-memory gateway state:
-
-- recent activity;
-- latency samples;
-- total updates;
-- total broadcasts;
-- coalesced updates;
-- last processed update.
-
-It does not delete Firestore data.
-
-### Close WebSocket clients
-
-```powershell
-curl.exe -s -X POST -H "Content-Type: application/json" -H "x-debug-token: pcd-debug-demo-token" --data "{}" "$WS_GATEWAY_URL/debug/close-clients" | jq
-```
-
-This is used to test dashboard reconnection behavior.
-
----
-
-## 16. Benchmark scripts
-
-All benchmark results are written to:
-
-```text
-benchmark-results/
-```
-
-This folder is ignored by Git.
-
-### 16.1 Burst benchmark
-
-```powershell
-cd C:\Users\maria\pcd\project
-```
-
-```powershell
-$REGION="us-central1"
-```
-
-```powershell
-$MOVIE_ID="573a1390f29313caabcd42e8"
-```
+Set the debug token:
 
 ```powershell
 $env:DEBUG_TOKEN="pcd-debug-demo-token"
 ```
 
+Reset in-memory gateway metrics:
+
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-burst.ps1 -Region $REGION -MovieId $MOVIE_ID -Requests 50 -WaitSeconds 25 -OutputDir "benchmark-results"
+curl.exe -s -X POST `
+  -H "Content-Type: application/json" `
+  -H "x-debug-token: $env:DEBUG_TOKEN" `
+  --data "{}" `
+  "$WS_GATEWAY_URL/debug/reset" | jq
 ```
 
-### 16.2 Variable-volume benchmark
+This resets in-memory gateway state, but does not delete Firestore data.
+
+Close connected WebSocket clients to test dashboard reconnection:
 
 ```powershell
-cd C:\Users\maria\pcd\project
+curl.exe -s -X POST `
+  -H "Content-Type: application/json" `
+  -H "x-debug-token: $env:DEBUG_TOKEN" `
+  --data "{}" `
+  "$WS_GATEWAY_URL/debug/close-clients" | jq
+```
+
+Expected result is that the dashboard reconnects automatically.
+
+---
+
+## 15. Benchmark commands
+
+All benchmark results are saved in:
+
+```text
+benchmark-results/
+```
+
+Set common variables:
+
+```powershell
+cd <project-root>
+
+$REGION="us-central1"
+$MOVIE_ID="573a1390f29313caabcd42e8"
+$env:DEBUG_TOKEN="pcd-debug-demo-token"
+```
+
+### 15.1 Burst benchmark
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-burst.ps1 `
+  -Region $REGION `
+  -MovieId $MOVIE_ID `
+  -Requests 100 `
+  -WaitSeconds 30 `
+  -OutputDir "benchmark-results"
+```
+
+### 15.2 Variable-volume benchmark
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-load-series.ps1 `
+  -Region $REGION `
+  -MovieId $MOVIE_ID `
+  -RequestCounts "10,20,50,100" `
+  -WaitSeconds 30 `
+  -OutputDir "benchmark-results"
+```
+
+### 15.3 Consistency window benchmark
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-consistency.ps1 `
+  -Region $REGION `
+  -MovieId $MOVIE_ID `
+  -Trials 5 `
+  -PollIntervalMs 500 `
+  -TimeoutSeconds 30 `
+  -OutputDir "benchmark-results"
+```
+
+### 15.4 Concurrency benchmark
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1 `
+  -Region $REGION `
+  -MovieId $MOVIE_ID `
+  -Requests 100 `
+  -ConcurrencyLevels "1,5,10,20" `
+  -WaitSeconds 45 `
+  -OutputDir "benchmark-results"
 ```
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-load-series.ps1 -Region $REGION -MovieId $MOVIE_ID -RequestCounts "10,20,50,100" -WaitSeconds 30 -OutputDir "benchmark-results"
-```
-
-### 16.3 Consistency window benchmark
-
-```powershell
-cd C:\Users\maria\pcd\project
-```
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-consistency.ps1 -Region $REGION -MovieId $MOVIE_ID -Trials 5 -PollIntervalMs 500 -TimeoutSeconds 30 -OutputDir "benchmark-results"
-```
-
-### 16.4 Concurrency benchmark
-
-```powershell
-cd C:\Users\maria\pcd\project
-```
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1 -Region $REGION -MovieId $MOVIE_ID -Requests 100 -ConcurrencyLevels "1,5,10,20" -WaitSeconds 45 -OutputDir "benchmark-results"
-```
-
-If `hey` is not available globally:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1 -Region $REGION -MovieId $MOVIE_ID -Requests 100 -ConcurrencyLevels "1,5,10,20" -WaitSeconds 45 -OutputDir "benchmark-results" -HeyPath "C:\Users\maria\tools\hey\hey.exe"
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1 `
+  -Region $REGION `
+  -MovieId $MOVIE_ID `
+  -Requests 100 `
+  -ConcurrencyLevels "1,5,10,20" `
+  -WaitSeconds 45 `
+  -OutputDir "benchmark-results" `
+  -HeyPath "C:\path\to\hey.exe"
 ```
 
 ---
 
-## 17. Final benchmark results
+## 16. Final benchmark results
 
-The following results were obtained from the final benchmark run.
+The following values were obtained from the final benchmark run stored in `benchmark-results/`.
 
-### 17.1 Variable-volume benchmark
+### 16.1 Variable-volume benchmark
 
-This benchmark sends sequential movie access requests with increasing total volume.
+Source files:
 
-| Requests | Successful requests | Failed requests | Error rate | Approx. request rate | Total updates | Broadcasts | Coalesced updates | p50 latency | p95 latency | p99 latency |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 10 | 10 | 0 | 0% | 3.76 req/s | 10 | 1 | 9 | 5066 ms | 5893 ms | 5893 ms |
-| 20 | 20 | 0 | 0% | 3.89 req/s | 20 | 4 | 16 | 388 ms | 1959 ms | 2299 ms |
-| 50 | 50 | 0 | 0% | 3.85 req/s | 50 | 10 | 40 | 181 ms | 1315 ms | 1621 ms |
-| 100 | 100 | 0 | 0% | 3.85 req/s | 100 | 23 | 77 | 183 ms | 700 ms | 1166 ms |
+```text
+benchmark-results/load-series-summary-20260426-214858.csv
+benchmark-results/load-series-summary-20260426-214858.json
+```
 
-The system processed all events successfully. The 10-request run had higher latency because it was affected by warm-up and cloud scheduling effects. After that, the system stabilized and showed lower p95 and p99 latency.
+| Requests | Successful | Failed | Error rate | Req/s | Updates | Completion | Broadcasts | Coalesced | p50 latency | p95 latency | p99 latency |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 10 | 10 | 0 | 0% | 3.76 | 10 | 100% | 1 | 9 | 5066 ms | 5893 ms | 5893 ms |
+| 20 | 20 | 0 | 0% | 3.89 | 20 | 100% | 4 | 16 | 388 ms | 1959 ms | 2299 ms |
+| 50 | 50 | 0 | 0% | 3.85 | 50 | 100% | 10 | 40 | 181 ms | 1315 ms | 1621 ms |
+| 100 | 100 | 0 | 0% | 3.85 | 100 | 100% | 23 | 77 | 183 ms | 700 ms | 1166 ms |
+
+All requests returned HTTP 200 and all generated events were processed. The number of WebSocket broadcasts is lower than the number of processed updates because the gateway coalesces updates when events arrive quickly.
 
 ---
 
-### 17.2 Consistency window benchmark
+### 16.2 Consistency window benchmark
+
+Source files:
+
+```text
+benchmark-results/consistency-20260426-214138.json
+benchmark-results/consistency-trials-20260426-214138.csv
+benchmark-results/consistency-summary-20260426-214138.csv
+```
 
 | Metric | Value |
 |---|---:|
@@ -952,150 +961,65 @@ The system processed all events successfully. The 10-request run had higher late
 | Average Cloud Function processing latency | 72.2 ms |
 | Average gateway latency | 282 ms |
 
-The system is eventually consistent. The API response is returned before the dashboard is updated, but the update becomes visible shortly afterward. In the final run, the average measured consistency window was approximately 1.07 seconds.
+The system is eventually consistent. The API response is returned first, and the dashboard update becomes visible shortly afterward. In the final consistency benchmark, the average measured consistency window was about 1.07 seconds.
 
 ---
 
-### 17.3 Concurrency benchmark
+### 16.3 Concurrency benchmark
 
-This benchmark uses `hey` to send 100 requests with increasing concurrency.
+Source files:
 
-| Concurrency | HTTP 200 responses | Failed requests | Error rate | REST throughput | Total updates | Completion | Broadcasts | Coalesced updates | Dashboard p50 | Dashboard p95 | Dashboard p99 |
+```text
+benchmark-results/concurrency-summary-20260426-215325.csv
+benchmark-results/concurrency-summary-20260426-215325.json
+```
+
+| Concurrency | HTTP 200 | Failed | Error rate | REST req/s | Updates | Completion | Broadcasts | Coalesced | Dashboard p50 | Dashboard p95 | Dashboard p99 |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 100 | 0 | 0% | 6.25 req/s | 100 | 100% | 14 | 86 | 258 ms | 1396 ms | 1921 ms |
-| 5 | 100 | 0 | 0% | 29.38 req/s | 100 | 100% | 11 | 89 | 4738 ms | 7793 ms | 8370 ms |
-| 10 | 100 | 0 | 0% | 58.67 req/s | 100 | 100% | 8 | 92 | 3328 ms | 6026 ms | 6653 ms |
-| 20 | 100 | 0 | 0% | 83.08 req/s | 100 | 100% | 9 | 91 | 3250 ms | 7160 ms | 7724 ms |
+| 1 | 100 | 0 | 0% | 6.25 | 100 | 100% | 14 | 86 | 258 ms | 1396 ms | 1921 ms |
+| 5 | 100 | 0 | 0% | 29.38 | 100 | 100% | 11 | 89 | 4738 ms | 7793 ms | 8370 ms |
+| 10 | 100 | 0 | 0% | 58.67 | 100 | 100% | 8 | 92 | 3328 ms | 6026 ms | 6653 ms |
+| 20 | 100 | 0 | 0% | 83.08 | 100 | 100% | 9 | 91 | 3250 ms | 7160 ms | 7724 ms |
 
-The REST API remained stable under concurrent access. All requests returned HTTP 200 and all generated events were eventually processed.
+The REST API remained stable under concurrent access. All requests returned HTTP 200 and all generated events were eventually processed. The REST throughput increased from 6.25 requests/second at concurrency 1 to 83.08 requests/second at concurrency 20.
 
-The dashboard latency increased under higher concurrency because many events entered the asynchronous pipeline almost at the same time. The WebSocket Gateway reduced the number of broadcasts using backpressure and coalescing.
-
----
-
-## 18. Interpretation of results
-
-The benchmark results show that:
-
-- the REST API remains stable under load;
-- the error rate was 0% in the final benchmark runs;
-- no movie view events were lost;
-- Pub/Sub and the Cloud Function processed all generated events;
-- Firestore aggregation worked correctly;
-- the dashboard received all updates;
-- backpressure reduced the number of WebSocket broadcasts;
-- the system is eventually consistent, with an average consistency window of around 1 second;
-- concurrency increases REST throughput, but also increases dashboard-side latency because events are processed asynchronously.
-
-The main bottleneck is not the REST API response time. The main delay appears in the asynchronous analytics path:
-
-```text
-Pub/Sub -> Cloud Function -> Firestore -> Pub/Sub -> WebSocket Gateway
-```
-
-This is expected for an event-driven system where the API response and analytics update are decoupled.
+The dashboard latency values represent the asynchronous analytics pipeline, not only the REST response time. Under higher concurrency, many events enter the pipeline at the same time, increasing dashboard-side latency. The WebSocket Gateway reduces pressure on connected clients through backpressure and update coalescing.
 
 ---
 
-## 19. Bonus features implemented
+## 17. Requirement checklist
 
-The project implements all proposed bonus features for Project 1:
+| Requirement | Status |
+|---|---|
+| At least 3 independently deployed components | Implemented: Fast Lazy Bee, event-processor, WebSocket Gateway, Dashboard Client, gRPC Analytics Service |
+| At least 3 cloud-native services | Implemented: Cloud Run, Cloud Functions Gen2, Pub/Sub, Firestore, Cloud Build, Artifact Registry |
+| At least one stateful cloud service | Implemented with Firestore |
+| At least one FaaS component | Implemented with Cloud Functions Gen2 |
+| Real-time communication technology | Implemented with WebSocket |
+| Relevant distributed-system metrics | Implemented and benchmarked: latency, throughput, error rate, consistency window, backpressure |
+| GitHub repository with build, deploy and test instructions | Included in this README |
+| Service A publishes events on resource access | Implemented with Pub/Sub event publishing |
+| Cloud Function processes events | Implemented with `event-processor` |
+| Aggregated analytics storage | Implemented with Firestore `movie-stats` |
+| Idempotency for at-least-once delivery | Implemented with Firestore `processed-events` |
+| WebSocket Gateway pushes live updates | Implemented |
+| Dashboard displays real-time statistics | Implemented |
 
-### Backpressure
+Bonus features:
 
-The WebSocket Gateway uses update coalescing. When many events arrive quickly, it keeps the latest state and sends fewer WebSocket broadcasts.
-
-Example from the final concurrency benchmark:
-
-```text
-100 updates, concurrency 20
-9 WebSocket broadcasts
-91 coalesced updates
-```
-
-### gRPC internal communication
-
-The WebSocket Gateway calls the gRPC Analytics Service to retrieve top viewed movies.
-
-Verified flow:
-
-```text
-websocket-gateway -> gRPC -> grpc-analytics-service -> Firestore
-```
-
-### Real-time latency charts
-
-The dashboard includes a real-time latency chart with p50, p95 and p99 overlays.
+| Bonus feature | Status |
+|---|---|
+| Backpressure mechanism | Implemented with WebSocket update coalescing |
+| gRPC internal service communication | Implemented between WebSocket Gateway and gRPC Analytics Service |
+| Real-time latency chart with p50, p95 and p99 | Implemented in the dashboard |
 
 ---
 
-## 20. Resilience
+## 18. Notes
 
-The project includes several resilience mechanisms:
+The WebSocket Gateway is deployed with one Cloud Run instance for demo stability. WebSocket connections are stateful inside the gateway process, so a production multi-instance version would require shared connection state, sticky sessions, Redis, Pub/Sub fanout or a dedicated real-time messaging layer.
 
-- Pub/Sub decouples Service A from the analytics processor;
-- the Cloud Function is idempotent using the `processed-events` Firestore collection;
-- the WebSocket Gateway can reconstruct top movie state from Firestore;
-- the dashboard reconnects automatically after WebSocket disconnection;
-- the WebSocket Gateway falls back to Firestore if the gRPC analytics service is unavailable;
-- debug endpoints are protected with a token;
-- benchmark scripts reset only in-memory metrics and do not delete persistent Firestore data.
+The debug endpoints are enabled for testing and benchmark reproducibility. They are protected with a debug token and should not be left enabled in an unrestricted production deployment.
 
----
 
-## 21. Demo checklist
-
-Before the live demo:
-
-1. Open the deployed dashboard.
-2. Show the GitHub repository.
-3. Show the architecture diagram from this README.
-4. Show the Cloud Run services:
-   - `fast-lazy-bee`
-   - `websocket-gateway`
-   - `dashboard-client`
-   - `grpc-analytics-service`
-5. Show the Cloud Function:
-   - `event-processor`
-6. Show the Pub/Sub topics:
-   - `resource-events`
-   - `dashboard-updates`
-7. Show Firestore collections:
-   - `movie-stats`
-   - `processed-events`
-8. Trigger one or more movie view requests from PowerShell.
-9. Show the dashboard updating live.
-10. Show `/snapshot`.
-11. Show `/top-movies`.
-12. Show `/grpc/top-movies`.
-13. Run or show the benchmark scripts.
-14. Explain the consistency window.
-15. Explain the backpressure result.
-16. Explain the gRPC internal communication.
-17. Explain the WebSocket reconnection behavior.
-
----
-
-## 22. Current project status
-
-Implemented and validated:
-
-```text
-Fast Lazy Bee deployed on Cloud Run
-Cloud Function Gen2 event-processor deployed
-Pub/Sub event flow working
-Firestore movie-stats aggregation working
-Firestore processed-events idempotency working
-WebSocket Gateway deployed on Cloud Run
-Dashboard Client deployed on Cloud Run
-gRPC Analytics Service deployed on Cloud Run
-WebSocket real-time updates working
-Dashboard reconnection working
-Backpressure working
-p50/p95/p99 latency chart working
-gRPC internal communication working
-Benchmark scripts working
-Cloud deployment verification passing
-gRPC verification passing
-Smoke test passing
-```
+The dashboard is eventually consistent with the base REST API, and this is intentional because the user-facing movie API remains responsive while analytics processing happens asynchronously through Pub/Sub, Cloud Functions and Firestore.
