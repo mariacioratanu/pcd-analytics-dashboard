@@ -372,22 +372,3 @@ powershell.exe -ExecutionPolicy Bypass -File .\scripts\benchmark-concurrency.ps1
 ```
 
 Benchmark outputs are generated locally in `benchmark-results/`. The final benchmark files used in the report are copied and committed in `docs/benchmark-results/`.
-
-## 11. Final benchmark summary
-
-The final benchmark files used for the report are:
-- `docs/benchmark-results/load-series-summary-20260426-214858.csv`
-- `docs/benchmark-results/load-series-summary-20260426-214858.json`
-- `docs/benchmark-results/consistency-summary-20260426-214138.csv`
-- `docs/benchmark-results/consistency-trials-20260426-214138.csv`
-- `docs/benchmark-results/consistency-20260426-214138.json`
-- `docs/benchmark-results/concurrency-summary-20260426-215325.csv`
-- `docs/benchmark-results/concurrency-summary-20260426-215325.json`
-
-| Benchmark | Result |
-|---|---|
-| Variable-volume benchmark | 10, 20, 50 and 100 requests were processed with 0% errors and 100% completion |
-| Consistency benchmark | 5 / 5 successful trials, average consistency window 1073.15 ms |
-| Concurrency benchmark | 100 requests per run, concurrency 1 / 5 / 10 / 20, all with 0% errors and 100% processing completion |
-| Best measured REST throughput | 83.08 requests/second at concurrency 20 |
-| Backpressure example | At concurrency 20, 100 processed updates resulted in 9 WebSocket broadcasts and 91 coalesced updates |
