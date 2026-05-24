@@ -52,26 +52,39 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    A[Synthetic Interaction Generator] --> B[Raw Synthetic Events]
-    B --> C[Local Privacy Agent / Minimizer]
-    C --> D[Privacy-Preserving Daily Dataset]
-    D --> E[Feature Engineering Pipeline]
-    E --> F[Risk Estimation Engine]
+    A[Synthetic Interaction<br/>Generator] --> B[Raw Synthetic<br/>Events]
+    B --> C[Local Privacy Agent<br/>Data Minimization]
+    C --> D[(Privacy-Preserving<br/>Daily Dataset)]
+    D --> E[Feature Engineering<br/>Pipeline]
+    E --> F[Risk Estimation<br/>Engine]
     F --> G[Evaluation Suite]
     F --> H[Explainable Alerts]
-    H --> I[Dashboard]
+    H --> I[Streamlit Dashboard]
     I --> J[Human Reviewer]
-    J --> K[Feedback Store]
-    J --> L[Review Audit Log]
+    J --> K[(Feedback Store)]
+    J --> L[(Review Audit Log)]
 
-    G --> M[Results / Tables / Figures]
-    F --> N[Federated Learning Simulation]
+    G --> M[(Results / Tables / Figures)]
+    F --> N[Federated Learning<br/>Simulation]
 
-    subgraph Privacy Boundary
+    subgraph PB[Privacy Boundary]
         B
         C
         D
     end
+
+    classDef data fill:#E8F4FF,stroke:#3B82F6,stroke-width:1.5px,color:#1F2937;
+    classDef privacy fill:#F3E8FF,stroke:#7E57C2,stroke-width:1.5px,color:#1F2937;
+    classDef model fill:#EAF7EF,stroke:#4FA77A,stroke-width:1.5px,color:#1F2937;
+    classDef dashboard fill:#FFF7E6,stroke:#D8A23A,stroke-width:1.5px,color:#1F2937;
+    classDef audit fill:#FDECEF,stroke:#D85C7A,stroke-width:1.5px,color:#1F2937;
+    classDef storage fill:#FFFFFF,stroke:#555555,stroke-width:1.5px,color:#1F2937;
+
+    class A,B data;
+    class C,D privacy;
+    class E,F,G,H,M,N model;
+    class I,J dashboard;
+    class K,L audit;
 ```
 
 
@@ -80,15 +93,15 @@ flowchart LR
 flowchart TB
     A[Raw Synthetic Events] --> B[Privacy Minimization]
 
-    subgraph Raw Event Fields
-        A1[Exact timestamp]
+    subgraph R[Raw Event Fields]
+        A1[Exact synthetic timestamp]
         A2[Synthetic contact ID]
         A3[Event ID]
         A4[Interaction duration]
         A5[Activity context]
     end
 
-    subgraph Forbidden Data
+    subgraph X[Forbidden Data<br/>Never Collected or Stored]
         X1[Conversation content]
         X2[Audio]
         X3[Transcripts]
@@ -104,7 +117,7 @@ flowchart TB
     C --> C3[Remove event identifiers]
     C --> C4[No content or audio enters the model]
 
-    B --> D[Daily Aggregation and Bucketing]
+    B --> D[Daily Aggregation<br/>and Bucketing]
     D --> D1[Interaction counts]
     D --> D2[Unique contact counts]
     D --> D3[Inactivity indicators]
@@ -112,9 +125,23 @@ flowchart TB
     D --> D5[Routine deviation]
     D --> D6[Missing-data ratio]
 
-    D --> E[Privacy-Preserving Daily Feature Table]
+    D --> E[(Privacy-Preserving<br/>Daily Feature Table)]
     E --> F[Risk Scoring / ML Models]
-    F --> G[Risk Scores + Explanations + Review Queue]
+    F --> G[Risk Scores]
+    F --> H[Explanations]
+    F --> I[Review Queue]
+
+    classDef raw fill:#E8F4FF,stroke:#3B82F6,stroke-width:1.5px,color:#1F2937;
+    classDef forbidden fill:#F2F2F2,stroke:#777777,stroke-width:1.5px,stroke-dasharray:5 5,color:#1F2937;
+    classDef privacy fill:#F3E8FF,stroke:#7E57C2,stroke-width:1.5px,color:#1F2937;
+    classDef kept fill:#EAF7EF,stroke:#4FA77A,stroke-width:1.5px,color:#1F2937;
+    classDef output fill:#FFF7E6,stroke:#D8A23A,stroke-width:1.5px,color:#1F2937;
+
+    class A,A1,A2,A3,A4,A5 raw;
+    class X,X1,X2,X3,X4,X5,X6,X7 forbidden;
+    class B,C,C1,C2,C3,C4 privacy;
+    class D,D1,D2,D3,D4,D5,D6,E kept;
+    class F,G,H,I output;
 ```
 
 
@@ -132,27 +159,43 @@ sequenceDiagram
     D->>R: Display alert for review
 
     R->>D: Inspect context and explanation
-    R->>F: Record decision\n(valid concern / false positive /\ntemporary disruption / needs more data)
-    R->>A: Record reviewer role, reason,\naction, consent status, non-medical note
+    R->>F: Record decision<br/>(valid concern / false positive /<br/>temporary disruption / needs more data)
+    R->>A: Record reviewer role, reason,<br/>action, consent status, non-medical note
 
     D-->>R: Show stored review outcome
 ```
 
 ```mermaid
 flowchart LR
-    A[Generate Synthetic Dataset] --> B[Apply Privacy Minimization]
-    B --> C[Build Model Features]
-    C --> D[Run Risk Models]
-    D --> E[Threshold Sensitivity]
-    D --> F[Model Comparison]
-    D --> G[Privacy / Utility Experiment]
-    D --> H[Error Analysis]
-    D --> I[Federated Learning Simulation]
-    E --> J[Final Results]
-    F --> J
-    G --> J
-    H --> J
-    I --> J
+    A[Generate Synthetic<br/>Dataset] --> B[Apply Privacy<br/>Minimization]
+    B --> C[Build Model<br/>Features]
+    C --> D[Run Risk<br/>Models]
+
+    D --> E[Threshold<br/>Sensitivity]
+    D --> F[Model<br/>Comparison]
+    D --> G[Privacy / Utility<br/>Experiment]
+    D --> H[Error<br/>Analysis]
+    D --> I[Federated Learning<br/>Simulation]
+    D --> J[Explainable Alerts<br/>and Audit Review]
+
+    E --> K[(Final Results)]
+    F --> K
+    G --> K
+    H --> K
+    I --> K
+    J --> K
+
+    classDef data fill:#E8F4FF,stroke:#3B82F6,stroke-width:1.5px,color:#1F2937;
+    classDef privacy fill:#F3E8FF,stroke:#7E57C2,stroke-width:1.5px,color:#1F2937;
+    classDef model fill:#EAF7EF,stroke:#4FA77A,stroke-width:1.5px,color:#1F2937;
+    classDef experiment fill:#FFF7E6,stroke:#D8A23A,stroke-width:1.5px,color:#1F2937;
+    classDef output fill:#FFFFFF,stroke:#555555,stroke-width:1.5px,color:#1F2937;
+
+    class A data;
+    class B privacy;
+    class C,D model;
+    class E,F,G,H,I,J experiment;
+    class K output;
 ```
 The architecture separates the synchronous movie API from the asynchronous analytics pipeline, so the REST response is returned immediately while dashboard statistics are updated shortly afterward.
 
