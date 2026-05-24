@@ -94,6 +94,7 @@ flowchart TB
     A[Raw Synthetic Events] --> B[Privacy Minimization]
 
     subgraph R[Raw Event Fields]
+        direction TB
         A1[Exact synthetic timestamp]
         A2[Synthetic contact ID]
         A3[Event ID]
@@ -101,7 +102,9 @@ flowchart TB
         A5[Activity context]
     end
 
-    subgraph X[Forbidden Data<br/>Never Collected or Stored]
+    subgraph X[Forbidden Data]
+        direction TB
+        X0[Never collected or stored]
         X1[Conversation content]
         X2[Audio]
         X3[Transcripts]
@@ -141,7 +144,7 @@ flowchart TB
     classDef output fill:#FFF7E6,stroke:#D8A23A,stroke-width:1.5px,color:#1F2937;
 
     class A,A1,A2,A3,A4,A5 raw;
-    class X,X1,X2,X3,X4,X5,X6,X7 forbidden;
+    class X,X0,X1,X2,X3,X4,X5,X6,X7 forbidden;
     class B,C,C1,C2,C3,C4 privacy;
     class D,D1,D2,D3,D4,D5,D6,E kept;
     class F,G,H,I output;
