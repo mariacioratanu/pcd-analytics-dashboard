@@ -102,9 +102,8 @@ flowchart TB
         A5[Activity context]
     end
 
-    subgraph X[Forbidden Data]
+    subgraph X[Forbidden Data never collected or stored]
         direction TB
-        X0[Never collected or stored]
         X1[Conversation content]
         X2[Audio]
         X3[Transcripts]
