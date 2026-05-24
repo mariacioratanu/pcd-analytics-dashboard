@@ -91,31 +91,27 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    A[Raw Synthetic Events] --> B[Privacy Minimization]
+    A[Raw Synthetic Events] --> B[Privacy Minimization Layer]
 
-    subgraph R[Raw Event Fields]
-        A1[Exact synthetic timestamp]
-        A2[Synthetic contact ID]
-        A3[Event ID]
-        A4[Interaction duration]
-        A5[Activity context]
-    end
+    A --> A1[Exact synthetic timestamps]
+    A --> A2[Synthetic contact IDs]
+    A --> A3[Event IDs]
+    A --> A4[Interaction durations]
+    A --> A5[Activity context]
 
-    subgraph X[Forbidden Data<br/>Never Collected or Stored]
-        X1[Conversation content]
-        X2[Audio]
-        X3[Transcripts]
-        X4[Keywords / topics]
-        X5[Real names / phone numbers]
-        X6[Precise GPS]
-        X7[Medical diagnosis data]
-    end
+    X[Forbidden Data<br/>Never Collected or Stored] --> X1[Conversation content]
+    X --> X2[Audio]
+    X --> X3[Transcripts]
+    X --> X4[Keywords / topics]
+    X --> X5[Real names / phone numbers]
+    X --> X6[Precise GPS]
+    X --> X7[Medical diagnosis data]
 
-    B --> C[Dropped / Hidden Fields]
+    B --> C[Dropped or Hidden Fields]
     C --> C1[Remove exact timestamps]
     C --> C2[Remove contact identifiers]
     C --> C3[Remove event identifiers]
-    C --> C4[No content or audio enters the model]
+    C --> C4[No content enters the model]
 
     B --> D[Daily Aggregation<br/>and Bucketing]
     D --> D1[Interaction counts]
@@ -126,13 +122,13 @@ flowchart TB
     D --> D6[Missing-data ratio]
 
     D --> E[(Privacy-Preserving<br/>Daily Feature Table)]
-    E --> F[Risk Scoring / ML Models]
+    E --> F[Risk Scoring<br/>and ML Models]
     F --> G[Risk Scores]
     F --> H[Explanations]
     F --> I[Review Queue]
 
     classDef raw fill:#E8F4FF,stroke:#3B82F6,stroke-width:1.5px,color:#1F2937;
-    classDef forbidden fill:#F2F2F2,stroke:#777777,stroke-width:1.5px,stroke-dasharray:5 5,color:#1F2937;
+    classDef forbidden fill:#F2F2F2,stroke:#777777,stroke-width:1.5px,stroke-dasharray: 5 5,color:#1F2937;
     classDef privacy fill:#F3E8FF,stroke:#7E57C2,stroke-width:1.5px,color:#1F2937;
     classDef kept fill:#EAF7EF,stroke:#4FA77A,stroke-width:1.5px,color:#1F2937;
     classDef output fill:#FFF7E6,stroke:#D8A23A,stroke-width:1.5px,color:#1F2937;
