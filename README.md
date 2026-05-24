@@ -91,27 +91,34 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    A[Raw Synthetic Events] --> B[Privacy Minimization Layer]
+    A[Raw Synthetic Events] --> B[Privacy Minimization]
 
-    A --> A1[Exact synthetic timestamps]
-    A --> A2[Synthetic contact IDs]
-    A --> A3[Event IDs]
-    A --> A4[Interaction durations]
-    A --> A5[Activity context]
+    subgraph R[Raw Event Fields]
+        A1[Exact synthetic timestamp]
+        A2[Synthetic contact ID]
+        A3[Event ID]
+        A4[Interaction duration]
+        A5[Activity context]
+    end
 
-    X[Forbidden Data<br/>Never Collected or Stored] --> X1[Conversation content]
-    X --> X2[Audio]
-    X --> X3[Transcripts]
-    X --> X4[Keywords / topics]
-    X --> X5[Real names / phone numbers]
-    X --> X6[Precise GPS]
-    X --> X7[Medical diagnosis data]
+    subgraph X[Forbidden Data<br/>Never Collected or Stored]
+        X1[Conversation content]
+        X2[Audio]
+        X3[Transcripts]
+        X4[Keywords / topics]
+        X5[Real names / phone numbers]
+        X6[Precise GPS]
+        X7[Medical diagnosis data]
+    end
 
-    B --> C[Dropped or Hidden Fields]
+    A -. contains .-> R
+    X -. excluded by design .-> B
+
+    B --> C[Dropped / Hidden Fields]
     C --> C1[Remove exact timestamps]
     C --> C2[Remove contact identifiers]
     C --> C3[Remove event identifiers]
-    C --> C4[No content enters the model]
+    C --> C4[No content or audio enters the model]
 
     B --> D[Daily Aggregation<br/>and Bucketing]
     D --> D1[Interaction counts]
@@ -122,13 +129,13 @@ flowchart TB
     D --> D6[Missing-data ratio]
 
     D --> E[(Privacy-Preserving<br/>Daily Feature Table)]
-    E --> F[Risk Scoring<br/>and ML Models]
+    E --> F[Risk Scoring / ML Models]
     F --> G[Risk Scores]
     F --> H[Explanations]
     F --> I[Review Queue]
 
     classDef raw fill:#E8F4FF,stroke:#3B82F6,stroke-width:1.5px,color:#1F2937;
-    classDef forbidden fill:#F2F2F2,stroke:#777777,stroke-width:1.5px,stroke-dasharray: 5 5,color:#1F2937;
+    classDef forbidden fill:#F2F2F2,stroke:#777777,stroke-width:1.5px,stroke-dasharray:5 5,color:#1F2937;
     classDef privacy fill:#F3E8FF,stroke:#7E57C2,stroke-width:1.5px,color:#1F2937;
     classDef kept fill:#EAF7EF,stroke:#4FA77A,stroke-width:1.5px,color:#1F2937;
     classDef output fill:#FFF7E6,stroke:#D8A23A,stroke-width:1.5px,color:#1F2937;
@@ -159,6 +166,39 @@ sequenceDiagram
     R->>A: Record reviewer role, reason,<br/>action, consent status, non-medical note
 
     D-->>R: Show stored review outcome
+```
+
+```mermaid
+flowchart TB
+    A[High Metadata-Only<br/>Risk Alert] --> B[Explainable Alert Drivers]
+    B --> C[Dashboard Review Queue]
+    C --> D[Human Reviewer<br/>Inspects Context]
+    D --> E{{Review Decision}}
+
+    E --> E1[Valid Concern]
+    E --> E2[False Positive]
+    E --> E3[Temporary Disruption]
+    E --> E4[Needs More Data]
+
+    E1 --> F[Action Taken<br/>No Automatic Intervention]
+    E2 --> F
+    E3 --> F
+    E4 --> F
+
+    F --> G[(Review Audit Log)]
+    G --> H[Stored Evidence:<br/>reviewer role, reason,<br/>consent status,<br/>content_accessed = no,<br/>medical_decision = no]
+
+    classDef alert fill:#FFF7E6,stroke:#D8A23A,stroke-width:1.5px,color:#1F2937;
+    classDef explanation fill:#EAF7EF,stroke:#4FA77A,stroke-width:1.5px,color:#1F2937;
+    classDef human fill:#F3E8FF,stroke:#7E57C2,stroke-width:1.5px,color:#1F2937;
+    classDef decision fill:#FFFFFF,stroke:#555555,stroke-width:1.5px,color:#1F2937;
+    classDef audit fill:#FDECEF,stroke:#D85C7A,stroke-width:1.5px,color:#1F2937;
+
+    class A,C alert;
+    class B explanation;
+    class D human;
+    class E,E1,E2,E3,E4,F decision;
+    class G,H audit;
 ```
 
 ```mermaid
