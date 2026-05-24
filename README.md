@@ -50,6 +50,110 @@ flowchart LR
     Browser -->|opens dashboard| Dashboard
 ```
 
+```mermaid
+flowchart LR
+    A[Synthetic Interaction Generator] --> B[Raw Synthetic Events]
+    B --> C[Local Privacy Agent / Minimizer]
+    C --> D[Privacy-Preserving Daily Dataset]
+    D --> E[Feature Engineering Pipeline]
+    E --> F[Risk Estimation Engine]
+    F --> G[Evaluation Suite]
+    F --> H[Explainable Alerts]
+    H --> I[Dashboard]
+    I --> J[Human Reviewer]
+    J --> K[Feedback Store]
+    J --> L[Review Audit Log]
+
+    G --> M[Results / Tables / Figures]
+    F --> N[Federated Learning Simulation]
+
+    subgraph Privacy Boundary
+        B
+        C
+        D
+    end
+```
+
+
+
+```mermaid
+flowchart TB
+    A[Raw Synthetic Events] --> B[Privacy Minimization]
+
+    subgraph Raw Event Fields
+        A1[Exact timestamp]
+        A2[Synthetic contact ID]
+        A3[Event ID]
+        A4[Interaction duration]
+        A5[Activity context]
+    end
+
+    subgraph Forbidden Data
+        X1[Conversation content]
+        X2[Audio]
+        X3[Transcripts]
+        X4[Keywords / topics]
+        X5[Real names / phone numbers]
+        X6[Precise GPS]
+        X7[Medical diagnosis data]
+    end
+
+    B --> C[Dropped / Hidden Fields]
+    C --> C1[Remove exact timestamps]
+    C --> C2[Remove contact identifiers]
+    C --> C3[Remove event identifiers]
+    C --> C4[No content or audio enters the model]
+
+    B --> D[Daily Aggregation and Bucketing]
+    D --> D1[Interaction counts]
+    D --> D2[Unique contact counts]
+    D --> D3[Inactivity indicators]
+    D --> D4[Out-of-home bucket]
+    D --> D5[Routine deviation]
+    D --> D6[Missing-data ratio]
+
+    D --> E[Privacy-Preserving Daily Feature Table]
+    E --> F[Risk Scoring / ML Models]
+    F --> G[Risk Scores + Explanations + Review Queue]
+```
+
+
+```mermaid
+sequenceDiagram
+    participant M as Risk Estimation Engine
+    participant E as Explainable Alerts Module
+    participant D as Dashboard
+    participant R as Human Reviewer
+    participant F as Feedback Store
+    participant A as Review Audit Log
+
+    M->>E: Generate high-risk alert
+    E->>D: Send alert + explanation
+    D->>R: Display alert for review
+
+    R->>D: Inspect context and explanation
+    R->>F: Record decision\n(valid concern / false positive /\ntemporary disruption / needs more data)
+    R->>A: Record reviewer role, reason,\naction, consent status, non-medical note
+
+    D-->>R: Show stored review outcome
+```
+
+```mermaid
+flowchart LR
+    A[Generate Synthetic Dataset] --> B[Apply Privacy Minimization]
+    B --> C[Build Model Features]
+    C --> D[Run Risk Models]
+    D --> E[Threshold Sensitivity]
+    D --> F[Model Comparison]
+    D --> G[Privacy / Utility Experiment]
+    D --> H[Error Analysis]
+    D --> I[Federated Learning Simulation]
+    E --> J[Final Results]
+    F --> J
+    G --> J
+    H --> J
+    I --> J
+```
 The architecture separates the synchronous movie API from the asynchronous analytics pipeline, so the REST response is returned immediately while dashboard statistics are updated shortly afterward.
 
 ## 3. Prerequisites
